@@ -6,9 +6,9 @@ import {
   SolflareWalletAdapter,
   TorusWalletAdapter,
   LedgerWalletAdapter,
-  BackpackWalletAdapter,
-  CoinbaseWalletAdapter,
-  TrustWalletAdapter
+  BraveWalletAdapter,
+  Coin98WalletAdapter,
+  MathWalletAdapter
 } from '@solana/wallet-adapter-wallets';
 import { WalletModalProvider } from '@solana/wallet-adapter-react-ui';
 import { clusterApiUrl } from '@solana/web3.js';
@@ -30,9 +30,9 @@ export const WalletContextProvider: FC<Props> = ({ children }) => {
       new SolflareWalletAdapter(),
       new TorusWalletAdapter(),
       new LedgerWalletAdapter(),
-      new BackpackWalletAdapter(),
-      new CoinbaseWalletAdapter(),
-      new TrustWalletAdapter()
+      new BraveWalletAdapter(),
+      new Coin98WalletAdapter(),
+      new MathWalletAdapter()
     ],
     []
   );
