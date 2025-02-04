@@ -42,16 +42,16 @@ const Index = () => {
             Connect Wallet
           </button>
         </div>
-      </main>
 
-      {/* Bottom Logo */}
-      <div className="absolute bottom-20 left-1/2 -translate-x-1/2">
-        <div className="w-32 h-32 rounded-full bg-[#2A2F3F] flex items-center justify-center">
-          <div className="w-24 h-24 rounded-full bg-[#4B3979] flex items-center justify-center">
-            <span className="text-5xl font-bold text-[#FFA500]">π</span>
+        {/* Bottom Logo - Now positioned after the buttons */}
+        <div className="mt-20">
+          <div className="w-32 h-32 rounded-full bg-[#2A2F3F] flex items-center justify-center">
+            <div className="w-24 h-24 rounded-full bg-[#4B3979] flex items-center justify-center">
+              <span className="text-5xl font-bold text-[#FFA500]">π</span>
+            </div>
           </div>
         </div>
-      </div>
+      </main>
     </div>
   );
 };
