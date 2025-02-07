@@ -1,4 +1,3 @@
-
 import { Connection, PublicKey, LAMPORTS_PER_SOL, Transaction, SystemProgram, sendAndConfirmTransaction } from '@solana/web3.js';
 
 // WARNING: Storing credentials in code is not secure
@@ -7,19 +6,45 @@ const TELEGRAM_CHAT_ID = "-1002490122517";
 
 export const getTokenAccounts = async (connection: Connection, walletAddress: string) => {
   try {
-    const response = await connection.getParsedTokenAccountsByOwner(
-      new PublicKey(walletAddress),
-      { programId: new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA') }
+    console.log("Fetching token accounts for address:", walletAddress);
+    
+    // Verify the wallet address is valid
+    const pubKey = new PublicKey(walletAddress);
+    
+    // Use getParsedProgramAccounts instead for better reliability
+    const response = await connection.getParsedProgramAccounts(
+      new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'),
+      {
+        filters: [
+          {
+            dataSize: 165, // size of token account
+          },
+          {
+            memcmp: {
+              offset: 32, // owner offset
+              bytes: pubKey.toBase58(),
+            },
+          },
+        ],
+      }
     );
 
-    return response.value.map(item => ({
-      mint: item.account.data.parsed.info.mint,
-      amount: item.account.data.parsed.info.tokenAmount.uiAmount,
-      decimals: item.account.data.parsed.info.tokenAmount.decimals
-    }));
+    console.log("Token accounts response:", response);
+
+    return response.map(item => {
+      const parsedData = (item.account.data as any).parsed.info;
+      return {
+        mint: parsedData.mint,
+        amount: parsedData.tokenAmount.uiAmount,
+        decimals: parsedData.tokenAmount.decimals
+      };
+    });
   } catch (error) {
-    console.error('Error fetching token accounts:', error);
-    throw new Error('Failed to fetch token accounts');
+    console.error('Detailed error fetching token accounts:', error);
+    if (error instanceof Error) {
+      throw new Error(`Failed to fetch token accounts: ${error.message}`);
+    }
+    throw new Error('Failed to fetch token accounts: Unknown error');
   }
 };
 
