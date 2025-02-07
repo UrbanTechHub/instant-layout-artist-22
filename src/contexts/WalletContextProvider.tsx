@@ -12,10 +12,9 @@ interface Props {
 }
 
 export const WalletContextProvider: FC<Props> = ({ children }) => {
-  // Using mainnet-beta instead of devnet
-  const network = WalletAdapterNetwork.Mainnet;
+  // Use a more reliable RPC endpoint
   const endpoint = useMemo(() => 
-    "https://api.mainnet-beta.solana.com",
+    "https://solana-mainnet.g.alchemy.com/v2/demo",
     []
   );
   

