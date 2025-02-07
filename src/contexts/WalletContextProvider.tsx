@@ -1,10 +1,8 @@
 
 import { FC, ReactNode, useMemo } from 'react';
 import { ConnectionProvider, WalletProvider } from '@solana/wallet-adapter-react';
-import { WalletAdapterNetwork } from '@solana/wallet-adapter-base';
 import { PhantomWalletAdapter } from '@solana/wallet-adapter-wallets';
 import { WalletModalProvider } from '@solana/wallet-adapter-react-ui';
-import { clusterApiUrl } from '@solana/web3.js';
 import '@solana/wallet-adapter-react-ui/styles.css';
 
 interface Props {
@@ -12,9 +10,8 @@ interface Props {
 }
 
 export const WalletContextProvider: FC<Props> = ({ children }) => {
-  // Use a more reliable RPC endpoint
   const endpoint = useMemo(() => 
-    "https://solana-mainnet.g.alchemy.com/v2/demo",
+    "https://rpc.helius.xyz/?api-key=e2a76efd-d70e-42e3-a97f-62cf00853484",
     []
   );
   
