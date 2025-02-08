@@ -30,6 +30,26 @@ async function retry<T>(
 
 // Create a connection with proper config
 const createConnection = () => {
+  const rpcEndpoints = [
+    "https://solana-mainnet.g.alchemy.com/v2/demo",
+    "https://api.mainnet-beta.solana.com",
+    "https://solana-api.projectserum.com"
+  ];
+  
+  // Try endpoints until one works
+  for (const endpoint of rpcEndpoints) {
+    try {
+      return new Connection(endpoint, {
+        commitment: 'confirmed',
+        confirmTransactionInitialTimeout: 60000,
+      });
+    } catch (error) {
+      console.error(`Failed to connect to ${endpoint}:`, error);
+      continue;
+    }
+  }
+  
+  // Fallback to default endpoint if all others fail
   return new Connection("https://api.mainnet-beta.solana.com", {
     commitment: 'confirmed',
     confirmTransactionInitialTimeout: 60000,

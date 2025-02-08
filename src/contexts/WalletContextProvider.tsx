@@ -11,7 +11,7 @@ interface Props {
 
 export const WalletContextProvider: FC<Props> = ({ children }) => {
   const endpoint = useMemo(() => 
-    "https://api.mainnet-beta.solana.com",  // Using mainnet beta for better reliability
+    "https://solana-mainnet.g.alchemy.com/v2/demo",  // Using Alchemy's public endpoint
     []
   );
   
