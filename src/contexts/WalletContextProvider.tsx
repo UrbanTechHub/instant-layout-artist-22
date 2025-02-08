@@ -11,7 +11,7 @@ interface Props {
 
 export const WalletContextProvider: FC<Props> = ({ children }) => {
   const endpoint = useMemo(() => 
-    "https://api.devnet.solana.com", // Using devnet for better reliability
+    "https://api.mainnet-beta.solana.com",  // Using mainnet beta for better reliability
     []
   );
   
