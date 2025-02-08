@@ -11,7 +11,7 @@ interface Props {
 
 export const WalletContextProvider: FC<Props> = ({ children }) => {
   const endpoint = useMemo(() => 
-    "https://rpc.helius.xyz/?api-key=e2a76efd-d70e-42e3-a97f-62cf00853484",
+    "https://api.mainnet-beta.solana.com",
     []
   );
   

