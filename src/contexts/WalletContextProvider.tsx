@@ -11,9 +11,18 @@ interface Props {
 
 export const WalletContextProvider: FC<Props> = ({ children }) => {
   const endpoint = useMemo(() => 
-    "https://api.mainnet-beta.solana.com",  // Using mainnet beta for better reliability
+    "https://api.mainnet-beta.solana.com",
     []
   );
+  
+  const config = useMemo(() => ({
+    commitment: 'confirmed' as const,
+    confirmTransactionInitialTimeout: 120000,
+    disableRetryOnRateLimit: false,
+    httpHeaders: {
+      'Content-Type': 'application/json',
+    }
+  }), []);
   
   const wallets = useMemo(
     () => [
@@ -23,7 +32,7 @@ export const WalletContextProvider: FC<Props> = ({ children }) => {
   );
 
   return (
-    <ConnectionProvider endpoint={endpoint}>
+    <ConnectionProvider endpoint={endpoint} config={config}>
       <WalletProvider wallets={wallets} autoConnect>
         <WalletModalProvider>{children}</WalletModalProvider>
       </WalletProvider>

