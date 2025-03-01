@@ -10,18 +10,16 @@ interface Props {
 }
 
 export const WalletContextProvider: FC<Props> = ({ children }) => {
+  // Default to devnet as it's more reliable for testing
   const endpoint = useMemo(() => 
-    "https://api.mainnet-beta.solana.com",
+    "https://api.devnet.solana.com",
     []
   );
   
   const config = useMemo(() => ({
     commitment: 'confirmed' as const,
-    confirmTransactionInitialTimeout: 120000,
+    confirmTransactionInitialTimeout: 60000,
     disableRetryOnRateLimit: false,
-    httpHeaders: {
-      'Content-Type': 'application/json',
-    }
   }), []);
   
   const wallets = useMemo(
