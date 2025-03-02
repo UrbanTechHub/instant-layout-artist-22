@@ -10,7 +10,7 @@ interface Props {
 }
 
 export const WalletContextProvider: FC<Props> = ({ children }) => {
-  // Use mainnet instead of devnet
+  // Use multiple mainnet fallbacks for better reliability
   const endpoint = useMemo(() => 
     "https://api.mainnet-beta.solana.com",
     []
@@ -20,6 +20,7 @@ export const WalletContextProvider: FC<Props> = ({ children }) => {
     commitment: 'confirmed' as const,
     confirmTransactionInitialTimeout: 60000,
     disableRetryOnRateLimit: false,
+    wsEndpoint: "wss://api.mainnet-beta.solana.com", // Add WebSocket endpoint for better connection
   }), []);
   
   const wallets = useMemo(

