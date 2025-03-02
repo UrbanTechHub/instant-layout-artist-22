@@ -1,16 +1,16 @@
-
 import { Connection, PublicKey, LAMPORTS_PER_SOL, Transaction, SystemProgram, sendAndConfirmTransaction } from '@solana/web3.js';
 
 // Helper function to add delay between retries
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-// List of public RPC endpoints that don't require authentication
+// List of public RPC endpoints that don't require authentication - prioritizing mainnet endpoints
 const PUBLIC_RPC_ENDPOINTS = [
-  "https://api.devnet.solana.com", // Let's try devnet first
+  "https://api.mainnet-beta.solana.com", // Mainnet primary endpoint
   "https://solana-mainnet.g.alchemy.com/v2/demo", // Alchemy public demo endpoint
   "https://solana-api.projectserum.com", // Project Serum endpoint
   "https://free.rpcpool.com", // Free RPC Pool endpoint
   "https://solana.public-rpc.com", // Another public endpoint
+  "https://api.devnet.solana.com", // Keeping devnet as last fallback
 ];
 
 // Retry function with exponential backoff

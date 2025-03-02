@@ -10,9 +10,9 @@ interface Props {
 }
 
 export const WalletContextProvider: FC<Props> = ({ children }) => {
-  // Default to devnet as it's more reliable for testing
+  // Use mainnet instead of devnet
   const endpoint = useMemo(() => 
-    "https://api.devnet.solana.com",
+    "https://api.mainnet-beta.solana.com",
     []
   );
   
