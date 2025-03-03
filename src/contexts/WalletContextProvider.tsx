@@ -10,17 +10,23 @@ interface Props {
 }
 
 export const WalletContextProvider: FC<Props> = ({ children }) => {
-  // Use multiple mainnet fallbacks for better reliability
-  const endpoint = useMemo(() => 
+  // Multiple mainnet RPC endpoints for better reliability
+  const endpoints = useMemo(() => [
     "https://api.mainnet-beta.solana.com",
-    []
-  );
+    "https://solana-mainnet.g.alchemy.com/v2/demo",
+    "https://solana-api.projectserum.com", 
+    "https://rpc.ankr.com/solana",
+    "https://free.rpcpool.com",
+  ], []);
+  
+  // Use the first endpoint as default, fallbacks are handled in walletUtils.ts
+  const endpoint = useMemo(() => endpoints[0], [endpoints]);
   
   const config = useMemo(() => ({
-    commitment: 'confirmed' as const,
-    confirmTransactionInitialTimeout: 120000, // Increase timeout to 2 minutes
+    commitment: 'processed' as const, // Use 'processed' for faster responses
+    confirmTransactionInitialTimeout: 180000, // Increase timeout to 3 minutes
     disableRetryOnRateLimit: false,
-    wsEndpoint: "wss://api.mainnet-beta.solana.com", // WebSocket endpoint for better connection
+    wsEndpoint: "wss://api.mainnet-beta.solana.com", // WebSocket endpoint
     httpHeaders: { // Add custom headers to reduce rate limit issues
       "Content-Type": "application/json",
     },

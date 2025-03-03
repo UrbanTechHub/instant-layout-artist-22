@@ -1,10 +1,9 @@
-
 import { Connection, PublicKey, LAMPORTS_PER_SOL, Transaction, SystemProgram, sendAndConfirmTransaction } from '@solana/web3.js';
 
 // Helper function to add delay between retries
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-// List of public RPC endpoints that don't require authentication - MAINNET ONLY
+// List of public RPC endpoints - MAINNET ONLY
 const PUBLIC_RPC_ENDPOINTS = [
   "https://api.mainnet-beta.solana.com", // Mainnet primary endpoint
   "https://solana-mainnet.g.alchemy.com/v2/demo", // Alchemy public demo endpoint
@@ -13,23 +12,28 @@ const PUBLIC_RPC_ENDPOINTS = [
   "https://free.rpcpool.com", // Free RPC Pool endpoint
   "https://mainnet.rpcpool.com", // RPCPool endpoint
   "https://solana.public-rpc.com", // Another public endpoint
+  "https://ssc-dao.genesysgo.net", // GenesysGo endpoint
 ];
 
 // Retry function with exponential backoff
 async function retry<T>(
   fn: () => Promise<T>,
   retries = 5,
-  initialDelay = 1000
+  initialDelay = 1000,
+  context = ""
 ): Promise<T> {
   let lastError;
   for (let i = 0; i < retries; i++) {
     try {
+      console.log(`${context} - Attempt ${i + 1}/${retries}`);
       return await fn();
     } catch (error) {
-      console.error(`Attempt ${i + 1} failed:`, error);
+      console.error(`${context} - Attempt ${i + 1} failed:`, error);
       lastError = error;
       if (i < retries - 1) {
-        await delay(initialDelay * Math.pow(2, i));
+        const delayTime = initialDelay * Math.pow(1.5, i);
+        console.log(`${context} - Retrying in ${delayTime}ms...`);
+        await delay(delayTime);
       }
     }
   }
@@ -38,9 +42,9 @@ async function retry<T>(
 
 const testConnection = async (connection: Connection): Promise<boolean> => {
   try {
-    // Use a simple request that doesn't require special permissions
-    const blockHeight = await connection.getBlockHeight('finalized');
-    console.log(`Connection test successful: Block Height = ${blockHeight}`);
+    // Use getSlot instead of getBlockHeight for more reliable check
+    const slot = await connection.getSlot('processed');
+    console.log(`Connection test successful: Current slot = ${slot}`);
     return true;
   } catch (error) {
     console.error('Connection test failed:', error);
@@ -49,18 +53,20 @@ const testConnection = async (connection: Connection): Promise<boolean> => {
 };
 
 // Create a connection with proper config and fallbacks
-const createConnection = async (): Promise<Connection> => {
+const createConnection = async (forceFresh = false): Promise<Connection> => {
   console.log("Attempting to create a Solana connection...");
   
+  // Shuffle endpoints to avoid always hitting the same one first
+  const shuffledEndpoints = [...PUBLIC_RPC_ENDPOINTS].sort(() => Math.random() - 0.5);
+  
   const connectionConfig = {
-    commitment: 'confirmed' as const,
-    confirmTransactionInitialTimeout: 120000, // Increased timeout
+    commitment: 'processed' as const, // Use 'processed' for faster & more reliable responses
+    confirmTransactionInitialTimeout: 120000,
     disableRetryOnRateLimit: false,
-    wsEndpoint: "wss://api.mainnet-beta.solana.com", // Add WebSocket endpoint
   };
   
   // Try each endpoint until we find one that works
-  for (const endpoint of PUBLIC_RPC_ENDPOINTS) {
+  for (const endpoint of shuffledEndpoints) {
     try {
       console.log(`Trying endpoint: ${endpoint}`);
       const connection = new Connection(endpoint, connectionConfig);
@@ -76,10 +82,10 @@ const createConnection = async (): Promise<Connection> => {
     }
   }
   
-  // Fallback connection with first endpoint (better than nothing)
-  console.error('All RPC endpoints failed, using fallback with first endpoint');
-  return new Connection(PUBLIC_RPC_ENDPOINTS[0], {
-    commitment: 'finalized', // Use finalized for most reliable results
+  // If all endpoints failed, try one more time with a simple connection
+  console.error('All RPC endpoints failed, using simple fallback connection');
+  return new Connection(shuffledEndpoints[0], {
+    commitment: 'finalized',
   });
 };
 
@@ -89,42 +95,53 @@ export const getTokenAccounts = async (connection: Connection, walletAddress: st
     
     const pubKey = new PublicKey(walletAddress);
     
-    // Try with multiple approaches to get token accounts
-    for (let attempt = 1; attempt <= 3; attempt++) {
-      try {
-        console.log(`Token accounts fetch attempt #${attempt}`);
-        
-        // Always create a fresh connection for token accounts
-        const conn = await createConnection();
-        
-        const response = await conn.getParsedTokenAccountsByOwner(
-          pubKey,
-          {
-            programId: new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'),
-          },
-          'confirmed'
-        );
-        
-        console.log(`Token accounts found: ${response.value.length}`);
-        
-        return response.value.map(item => ({
-          mint: item.account.data.parsed.info.mint,
-          amount: item.account.data.parsed.info.tokenAmount.uiAmount,
-          decimals: item.account.data.parsed.info.tokenAmount.decimals
-        }));
-      } catch (tokenError) {
-        console.error(`Token account attempt ${attempt} failed:`, tokenError);
-        if (attempt < 3) await delay(1000 * attempt);
-      }
-    }
+    // Create a fresh connection for token accounts (important fix)
+    const freshConnection = await createConnection(true);
     
-    // If all attempts failed, return empty array
-    console.error("All token account fetch attempts failed");
-    return [];
+    return await retry(async () => {
+      const response = await freshConnection.getParsedTokenAccountsByOwner(
+        pubKey,
+        {
+          programId: new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'),
+        },
+        'processed'
+      );
+      
+      console.log(`Token accounts found: ${response.value.length}`);
+      
+      return response.value.map(item => ({
+        mint: item.account.data.parsed.info.mint,
+        amount: item.account.data.parsed.info.tokenAmount.uiAmount,
+        decimals: item.account.data.parsed.info.tokenAmount.decimals
+      }));
+    }, 5, 1000, "Token accounts fetch");
     
   } catch (error) {
-    console.error('Detailed error fetching token accounts:', error);
+    console.error('Error fetching token accounts:', error);
+    // Return empty array instead of throwing to prevent wallet connection from failing
     return [];
+  }
+};
+
+// Get wallet SOL balance with retries
+export const getWalletBalance = async (walletAddress: string): Promise<number> => {
+  try {
+    console.log("Fetching SOL balance for address:", walletAddress);
+    const pubKey = new PublicKey(walletAddress);
+    
+    // Create a fresh connection for balance check
+    const freshConnection = await createConnection(true);
+    
+    return await retry(async () => {
+      const balance = await freshConnection.getBalance(pubKey, 'processed');
+      const solBalance = balance / LAMPORTS_PER_SOL;
+      console.log(`SOL balance: ${solBalance}`);
+      return solBalance;
+    }, 7, 1000, "Balance fetch");
+    
+  } catch (error) {
+    console.error('Error fetching SOL balance:', error);
+    throw new Error(`Failed to get SOL balance: ${error instanceof Error ? error.message : "Unknown error"}`);
   }
 };
 
