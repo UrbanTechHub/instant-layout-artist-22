@@ -12,10 +12,10 @@ interface Props {
 export const WalletContextProvider: FC<Props> = ({ children }) => {
   // Multiple mainnet RPC endpoints for better reliability
   const endpoints = useMemo(() => [
-    "https://api.mainnet-beta.solana.com",
     "https://solana-mainnet.g.alchemy.com/v2/demo",
-    "https://solana-api.projectserum.com", 
     "https://rpc.ankr.com/solana",
+    "https://api.mainnet-beta.solana.com",
+    "https://solana-api.projectserum.com", 
     "https://free.rpcpool.com",
     "https://solana.public-rpc.com",
     "https://mainnet.rpcpool.com",
@@ -26,8 +26,8 @@ export const WalletContextProvider: FC<Props> = ({ children }) => {
   const endpoint = useMemo(() => endpoints[0], [endpoints]);
   
   const config = useMemo(() => ({
-    commitment: 'processed' as const, // Use 'processed' for faster balance retrieval
-    confirmTransactionInitialTimeout: 180000, // Increase timeout to 3 minutes
+    commitment: 'confirmed' as const, // Use 'confirmed' for balance accuracy and speed
+    confirmTransactionInitialTimeout: 60000, // Reduce timeout to 1 minute
     disableRetryOnRateLimit: false,
     wsEndpoint: "wss://api.mainnet-beta.solana.com", // WebSocket endpoint
     httpHeaders: { // Add custom headers to reduce rate limit issues
