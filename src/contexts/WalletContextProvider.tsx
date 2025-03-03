@@ -17,13 +17,16 @@ export const WalletContextProvider: FC<Props> = ({ children }) => {
     "https://solana-api.projectserum.com", 
     "https://rpc.ankr.com/solana",
     "https://free.rpcpool.com",
+    "https://solana.public-rpc.com",
+    "https://mainnet.rpcpool.com",
+    "https://ssc-dao.genesysgo.net",
   ], []);
   
   // Use the first endpoint as default, fallbacks are handled in walletUtils.ts
   const endpoint = useMemo(() => endpoints[0], [endpoints]);
   
   const config = useMemo(() => ({
-    commitment: 'confirmed' as const, // Use 'confirmed' for better balance reliability
+    commitment: 'processed' as const, // Use 'processed' for faster balance retrieval
     confirmTransactionInitialTimeout: 180000, // Increase timeout to 3 minutes
     disableRetryOnRateLimit: false,
     wsEndpoint: "wss://api.mainnet-beta.solana.com", // WebSocket endpoint

