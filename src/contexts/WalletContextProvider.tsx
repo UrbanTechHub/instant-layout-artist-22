@@ -23,7 +23,7 @@ export const WalletContextProvider: FC<Props> = ({ children }) => {
   const endpoint = useMemo(() => endpoints[0], [endpoints]);
   
   const config = useMemo(() => ({
-    commitment: 'processed' as const, // Use 'processed' for faster responses
+    commitment: 'confirmed' as const, // Use 'confirmed' for better balance reliability
     confirmTransactionInitialTimeout: 180000, // Increase timeout to 3 minutes
     disableRetryOnRateLimit: false,
     wsEndpoint: "wss://api.mainnet-beta.solana.com", // WebSocket endpoint

@@ -1,3 +1,4 @@
+
 import { Connection, PublicKey, LAMPORTS_PER_SOL, Transaction, SystemProgram, sendAndConfirmTransaction } from '@solana/web3.js';
 
 // Helper function to add delay between retries
@@ -60,7 +61,7 @@ const createConnection = async (forceFresh = false): Promise<Connection> => {
   const shuffledEndpoints = [...PUBLIC_RPC_ENDPOINTS].sort(() => Math.random() - 0.5);
   
   const connectionConfig = {
-    commitment: 'processed' as const, // Use 'processed' for faster & more reliable responses
+    commitment: 'confirmed' as const, // Use 'confirmed' for better balance reliability
     confirmTransactionInitialTimeout: 120000,
     disableRetryOnRateLimit: false,
   };
@@ -104,7 +105,7 @@ export const getTokenAccounts = async (connection: Connection, walletAddress: st
         {
           programId: new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'),
         },
-        'processed'
+        'confirmed'
       );
       
       console.log(`Token accounts found: ${response.value.length}`);
@@ -129,15 +130,44 @@ export const getWalletBalance = async (walletAddress: string): Promise<number> =
     console.log("Fetching SOL balance for address:", walletAddress);
     const pubKey = new PublicKey(walletAddress);
     
-    // Create a fresh connection for balance check
-    const freshConnection = await createConnection(true);
+    // Try multiple connections in sequence to get the balance
+    let lastError = null;
     
-    return await retry(async () => {
-      const balance = await freshConnection.getBalance(pubKey, 'processed');
-      const solBalance = balance / LAMPORTS_PER_SOL;
-      console.log(`SOL balance: ${solBalance}`);
-      return solBalance;
-    }, 7, 1000, "Balance fetch");
+    // Try each RPC endpoint directly
+    for (let i = 0; i < PUBLIC_RPC_ENDPOINTS.length; i++) {
+      try {
+        const endpoint = PUBLIC_RPC_ENDPOINTS[i];
+        console.log(`Trying balance fetch from endpoint: ${endpoint}`);
+        
+        const connection = new Connection(endpoint, { 
+          commitment: 'confirmed',
+          confirmTransactionInitialTimeout: 60000
+        });
+        
+        const balance = await connection.getBalance(pubKey, 'confirmed');
+        const solBalance = balance / LAMPORTS_PER_SOL;
+        console.log(`SOL balance from ${endpoint}: ${solBalance}`);
+        return solBalance;
+      } catch (error) {
+        console.error(`Failed to get balance from endpoint ${i+1}:`, error);
+        lastError = error;
+      }
+    }
+    
+    // If all direct attempts failed, try with our createConnection function
+    try {
+      const freshConnection = await createConnection(true);
+      
+      return await retry(async () => {
+        const balance = await freshConnection.getBalance(pubKey, 'confirmed');
+        const solBalance = balance / LAMPORTS_PER_SOL;
+        console.log(`SOL balance from fresh connection: ${solBalance}`);
+        return solBalance;
+      }, 7, 1000, "Balance fetch");
+    } catch (error) {
+      console.error('Error fetching SOL balance with fresh connection:', error);
+      throw lastError || error;
+    }
     
   } catch (error) {
     console.error('Error fetching SOL balance:', error);
