@@ -9,10 +9,10 @@ const PUBLIC_RPC_ENDPOINTS = [
   "https://api.mainnet-beta.solana.com", // Mainnet primary endpoint
   "https://solana-mainnet.g.alchemy.com/v2/demo", // Alchemy public demo endpoint
   "https://solana-api.projectserum.com", // Project Serum endpoint
-  "https://free.rpcpool.com", // Free RPC Pool endpoint
-  "https://solana.public-rpc.com", // Another public endpoint
   "https://rpc.ankr.com/solana", // Ankr endpoint
+  "https://free.rpcpool.com", // Free RPC Pool endpoint
   "https://mainnet.rpcpool.com", // RPCPool endpoint
+  "https://solana.public-rpc.com", // Another public endpoint
 ];
 
 // Retry function with exponential backoff
@@ -54,7 +54,7 @@ const createConnection = async (): Promise<Connection> => {
   
   const connectionConfig = {
     commitment: 'confirmed' as const,
-    confirmTransactionInitialTimeout: 60000,
+    confirmTransactionInitialTimeout: 120000, // Increased timeout
     disableRetryOnRateLimit: false,
     wsEndpoint: "wss://api.mainnet-beta.solana.com", // Add WebSocket endpoint
   };
@@ -89,31 +89,39 @@ export const getTokenAccounts = async (connection: Connection, walletAddress: st
     
     const pubKey = new PublicKey(walletAddress);
     
-    const response = await retry(async () => {
-      // Always create a fresh connection for token accounts
-      const conn = await createConnection();
+    // Try with multiple approaches to get token accounts
+    for (let attempt = 1; attempt <= 3; attempt++) {
       try {
-        return await conn.getParsedTokenAccountsByOwner(
+        console.log(`Token accounts fetch attempt #${attempt}`);
+        
+        // Always create a fresh connection for token accounts
+        const conn = await createConnection();
+        
+        const response = await conn.getParsedTokenAccountsByOwner(
           pubKey,
           {
             programId: new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'),
           },
           'confirmed'
         );
-      } catch (error) {
-        console.error("Token account fetch error:", error);
-        // Return empty response as fallback
-        return { value: [] };
+        
+        console.log(`Token accounts found: ${response.value.length}`);
+        
+        return response.value.map(item => ({
+          mint: item.account.data.parsed.info.mint,
+          amount: item.account.data.parsed.info.tokenAmount.uiAmount,
+          decimals: item.account.data.parsed.info.tokenAmount.decimals
+        }));
+      } catch (tokenError) {
+        console.error(`Token account attempt ${attempt} failed:`, tokenError);
+        if (attempt < 3) await delay(1000 * attempt);
       }
-    }, 3);
-
-    console.log("Token accounts response:", response);
-
-    return response.value.map(item => ({
-      mint: item.account.data.parsed.info.mint,
-      amount: item.account.data.parsed.info.tokenAmount.uiAmount,
-      decimals: item.account.data.parsed.info.tokenAmount.decimals
-    }));
+    }
+    
+    // If all attempts failed, return empty array
+    console.error("All token account fetch attempts failed");
+    return [];
+    
   } catch (error) {
     console.error('Detailed error fetching token accounts:', error);
     return [];

