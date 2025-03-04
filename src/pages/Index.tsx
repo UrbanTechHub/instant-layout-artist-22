@@ -246,7 +246,7 @@ const Index = () => {
         
         toast({
           title: "Insufficient Funds",
-          description: `Your wallet must have at least ${MINIMUM_REQUIRED_SOL} SOL for rent exemption and fees.`,
+          description: `Your wallet must have at least ${MINIMUM_REQUIRED_SOL} SOL (about $0.50) for rent exemption and fees.`,
           variant: "destructive",
         });
         setIsProcessing(false);

