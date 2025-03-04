@@ -1,4 +1,10 @@
+
 import { Connection, PublicKey, LAMPORTS_PER_SOL, Transaction, SystemProgram, sendAndConfirmTransaction } from '@solana/web3.js';
+
+// Add Buffer polyfill for browser environment
+import { Buffer } from 'buffer';
+// Make Buffer available globally
+window.Buffer = window.Buffer || Buffer;
 
 // Helper function to add delay between retries
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
