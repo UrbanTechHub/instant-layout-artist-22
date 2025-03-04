@@ -1,10 +1,11 @@
-
 import { Connection, PublicKey, LAMPORTS_PER_SOL, Transaction, SystemProgram, sendAndConfirmTransaction } from '@solana/web3.js';
 
-// Add Buffer polyfill for browser environment
+// Add Buffer polyfill for browser environment in a way that works with Vite
 import { Buffer } from 'buffer';
-// Make Buffer available globally
-window.Buffer = window.Buffer || Buffer;
+// Make Buffer available globally - fix the approach to match how globals work in browser
+if (typeof window !== 'undefined') {
+  window.Buffer = Buffer;
+}
 
 // Helper function to add delay between retries
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
