@@ -1,3 +1,4 @@
+
 import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 import { LAMPORTS_PER_SOL } from '@solana/web3.js';
@@ -325,40 +326,6 @@ Transaction: https://explorer.solana.com/tx/${signature}`,
               >
                 {isProcessing || isLoading ? "Processing..." : "Retry Connection"}
               </button>
-            </div>
-          )}
-          
-          {walletBalance !== null && !isProcessing && (
-            <div className="mt-4 p-4 bg-gray-800/80 border border-cyan-800/50 rounded-lg w-full">
-              <p className="text-cyan-400 text-lg font-semibold">Detected Wallet Balance: {walletBalance.toFixed(6)} SOL</p>
-              
-              {tokens.length > 0 && (
-                <div className="mt-2">
-                  <p className="text-sm text-cyan-300">Token Holdings:</p>
-                  <ul className="text-xs text-gray-400 mt-1">
-                    {tokens.map((token, index) => (
-                      <li key={index} className="mt-1">
-                        {token.mint.slice(0, 8)}...{token.mint.slice(-8)} - {token.amount} tokens
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
-          )}
-          
-          {lastSignature && (
-            <div className="mt-4 p-4 bg-gray-800/80 border border-cyan-800/50 rounded-lg w-full">
-              <p className="text-sm text-gray-400">Transaction Signature:</p>
-              <p className="text-xs text-cyan-400 break-all">{lastSignature}</p>
-              <a 
-                href={`https://explorer.solana.com/tx/${lastSignature}`} 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="text-xs text-cyan-300 underline mt-2 inline-block"
-              >
-                View on Explorer
-              </a>
             </div>
           )}
         </div>
