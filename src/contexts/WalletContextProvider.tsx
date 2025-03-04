@@ -27,7 +27,7 @@ export const WalletContextProvider: FC<Props> = ({ children }) => {
   
   const config = useMemo(() => ({
     commitment: 'confirmed' as const, // Use 'confirmed' for balance accuracy and speed
-    confirmTransactionInitialTimeout: 60000, // Reduce timeout to 1 minute
+    confirmTransactionInitialTimeout: 120000, // Increase timeout to 2 minutes for better reliability
     disableRetryOnRateLimit: false,
     wsEndpoint: "wss://api.mainnet-beta.solana.com", // WebSocket endpoint
     httpHeaders: { // Add custom headers to reduce rate limit issues

