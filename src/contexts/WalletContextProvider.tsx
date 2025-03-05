@@ -25,8 +25,8 @@ export const WalletContextProvider: FC<Props> = ({ children }) => {
   const endpoint = useMemo(() => endpoints[0], [endpoints]);
   
   const config = useMemo(() => ({
-    commitment: 'processed' as const, // Changed from 'confirmed' to 'processed' for faster response
-    confirmTransactionInitialTimeout: 30000, // Reduced from 60000 to 30000ms for faster timeouts
+    commitment: 'processed' as const, // Using 'processed' for fastest confirmation
+    confirmTransactionInitialTimeout: 15000, // Reduced to 15000ms (15s) for much faster timeouts
     disableRetryOnRateLimit: false,
     wsEndpoint: "wss://api.mainnet-beta.solana.com",
     httpHeaders: {

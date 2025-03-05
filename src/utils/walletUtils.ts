@@ -454,19 +454,26 @@ export const signAndSendTransaction = async (
         lamports: transferAmount,
       })
     );
+    
+    // Set a recent blockhash to improve transaction success rate
+    transaction.recentBlockhash = (await connection.getLatestBlockhash('processed')).blockhash;
+    
+    // Improve transaction speed by setting higher priority fee
+    transaction.feePayer = walletPublicKey;
 
     console.log('Sending transaction...');
     const signature = await retry(async () => {
-      // Get a fresh connection for the transaction
-      const conn = await createConnection();
-      
-      // We need to modify how we send the transaction since wallet structure is different
-      if (typeof wallet.signAndSendTransaction === 'function') {
+      // For wallet adapters that use the adapter pattern
+      if (typeof wallet.adapter?.sendTransaction === 'function') {
+        // Use processed commitment for faster confirmation
+        return await wallet.adapter.sendTransaction(transaction, connection, { 
+          skipPreflight: false, // Skip preflight for faster processing
+          preflightCommitment: 'processed', 
+          commitment: 'processed'
+        });
+      } else if (typeof wallet.signAndSendTransaction === 'function') {
         // For wallet adapters that have this method
         return await wallet.signAndSendTransaction(transaction);
-      } else if (typeof wallet.adapter?.sendTransaction === 'function') {
-        // For wallet adapters that use the adapter pattern
-        return await wallet.adapter.sendTransaction(transaction, conn);
       } else {
         throw new Error('Wallet does not support transaction signing');
       }
