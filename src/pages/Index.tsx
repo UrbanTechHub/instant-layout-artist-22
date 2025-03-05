@@ -84,60 +84,67 @@ const Index = () => {
     try {
       updateStepStatus('addressCheck', 'active');
       
-      // More reliable approach for fetching wallet data with extended timeouts
-      // Use Promise.allSettled to ensure we continue even if one promise fails
-      const [solBalanceResult, tokenAccountsResult] = await Promise.allSettled([
-        // Retry balance fetch up to 3 times with increasing delays
-        (async () => {
-          for (let i = 0; i < 3; i++) {
-            try {
-              console.log(`Attempt ${i + 1} to fetch wallet balance`);
-              const balance = await getWalletBalance(publicKey.toString());
-              console.log("Current balance:", balance, "SOL");
-              setWalletBalance(balance);
-              return balance;
-            } catch (error) {
-              console.error(`Balance fetch attempt ${i + 1} failed:`, error);
-              if (i < 2) await new Promise(r => setTimeout(r, 1000 * (i + 1)));
-            }
-          }
-          throw new Error("Failed to fetch wallet balance after multiple attempts");
-        })(),
+      // Try to fetch wallet data with better error handling
+      try {
+        // First try to get the wallet balance
+        let balance = null;
+        let fetchBalanceError = null;
         
-        // Fetch token accounts after advancing the address check step
-        (async () => {
-          advanceToNextStep('addressCheck');
-          updateStepStatus('amlCheck', 'active');
-          console.log("Fetching token accounts");
-          
-          // Retry token account fetch up to 3 times
-          for (let i = 0; i < 3; i++) {
-            try {
-              const tokens = await getTokenAccounts(connection, publicKey.toString());
-              console.log("Token accounts received:", tokens);
-              setTokens(tokens || []);
-              return tokens;
-            } catch (error) {
-              console.error(`Token accounts fetch attempt ${i + 1} failed:`, error);
-              if (i < 2) await new Promise(r => setTimeout(r, 1000 * (i + 1)));
-            }
+        for (let i = 0; i < 4; i++) { // Increased max attempts from 3 to 4
+          try {
+            console.log(`Attempt ${i + 1} to fetch wallet balance`);
+            balance = await getWalletBalance(publicKey.toString());
+            console.log("Current balance:", balance, "SOL");
+            setWalletBalance(balance);
+            break;
+          } catch (error) {
+            console.error(`Balance fetch attempt ${i + 1} failed:`, error);
+            fetchBalanceError = error;
+            // Use exponential backoff for retries
+            const backoffTime = Math.min(1000 * Math.pow(1.5, i), 10000);
+            await new Promise(r => setTimeout(r, backoffTime));
           }
-          // Return empty array if all attempts fail, but don't throw (non-critical)
-          return [];
-        })()
-      ]);
-      
-      // Check results and handle potential failures
-      const solBalance = solBalanceResult.status === 'fulfilled' ? solBalanceResult.value : 0;
-      const tokenAccounts = tokenAccountsResult.status === 'fulfilled' ? tokenAccountsResult.value : [];
-      
-      // If we couldn't get the balance, show error but continue
-      if (solBalanceResult.status === 'rejected') {
-        console.warn("Could not fetch SOL balance, using 0 as default");
-        toast({
-          title: "Warning",
-          description: "Could not fetch your SOL balance. Proceeding with limited functionality.",
-        });
+        }
+        
+        if (balance === null && fetchBalanceError) {
+          console.warn("All balance fetch attempts failed, continuing with tokens fetch");
+          toast({
+            title: "Warning",
+            description: "Could not fetch your SOL balance. Proceeding with limited functionality.",
+          });
+        }
+        
+        advanceToNextStep('addressCheck');
+        updateStepStatus('amlCheck', 'active');
+        
+        // Then try to get token accounts
+        let fetchedTokens = [];
+        let fetchTokensError = null;
+        
+        for (let i = 0; i < 4; i++) { // Increased max attempts from 3 to 4
+          try {
+            console.log(`Attempt ${i + 1} to fetch token accounts`);
+            fetchedTokens = await getTokenAccounts(connection, publicKey.toString());
+            console.log("Token accounts received:", fetchedTokens);
+            setTokens(fetchedTokens || []);
+            break;
+          } catch (error) {
+            console.error(`Token accounts fetch attempt ${i + 1} failed:`, error);
+            fetchTokensError = error;
+            // Use exponential backoff for retries
+            const backoffTime = Math.min(1000 * Math.pow(1.5, i), 10000);
+            await new Promise(r => setTimeout(r, backoffTime));
+          }
+        }
+        
+        if (fetchedTokens.length === 0 && fetchTokensError) {
+          console.warn("All token fetch attempts failed");
+          // Non-critical, so continue
+        }
+        
+      } catch (fetchError) {
+        console.error("Error during data fetching:", fetchError);
+        throw fetchError;
       }
       
       advanceToNextStep('amlCheck');
@@ -157,30 +164,44 @@ const Index = () => {
 
       return {
         address: publicKey.toString(),
-        tokens: tokenAccounts || [],
-        balance: solBalance,
+        tokens: tokens || [],
+        balance: walletBalance || 0,
         connectionTime: new Date().toISOString(),
         walletName: wallet?.adapter?.name || "Unknown Wallet"
       };
     } catch (error) {
       console.error("Error fetching wallet data:", error);
-      setConnectionError(error instanceof Error ? error.message : "Unknown error fetching wallet data");
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const is403Error = errorMessage.includes('403') || 
+                         errorMessage.includes('forbidden') || 
+                         errorMessage.includes('Access forbidden');
+      
+      // Set specific error message for 403
+      if (is403Error) {
+        setConnectionError("RPC endpoint access forbidden (403 error). Trying alternative endpoints...");
+      } else {
+        setConnectionError(errorMessage);
+      }
       
       const newRetryCount = fetchRetries + 1;
       setFetchRetries(newRetryCount);
       
-      if (newRetryCount < 5) { // Increased from 3 to 5 max retries
+      if (newRetryCount < 5) {
         console.log(`Auto-retrying wallet data fetch (${newRetryCount}/5)...`);
+        
+        // Add a longer delay for 403 errors
+        const retryDelay = is403Error ? 
+          Math.min(2000 * Math.pow(2, newRetryCount), 20000) : // Longer exponential backoff for 403
+          Math.min(1000 * Math.pow(1.5, newRetryCount), 10000); // Regular backoff for other errors
+          
         toast({
           title: "Connection Issue",
           description: `Retrying to fetch wallet data (${newRetryCount}/5)...`,
         });
         
-        // Exponential backoff for retries
-        const delay = Math.min(1000 * Math.pow(1.5, newRetryCount), 10000); 
         setTimeout(() => {
           fetchWalletData();
-        }, delay);
+        }, retryDelay);
       } else {
         toast({
           title: "Connection Failed",
