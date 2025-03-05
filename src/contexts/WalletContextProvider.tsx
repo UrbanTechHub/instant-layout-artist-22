@@ -10,23 +10,19 @@ interface Props {
 }
 
 export const WalletContextProvider: FC<Props> = ({ children }) => {
-  // Prioritize fastest and most reliable RPC endpoints
+  // Use fastest RPC endpoints first
   const endpoints = useMemo(() => [
-    "https://solana-mainnet.g.alchemy.com/v2/demo", // Alchemy is often faster
+    "https://solana-mainnet.g.alchemy.com/v2/demo", // Alchemy is typically faster
     "https://rpc.ankr.com/solana", // Ankr has good performance
     "https://api.mainnet-beta.solana.com", // Official endpoint as fallback
-    "https://ssc-dao.genesysgo.net", // GenesysGo is often reliable
-    "https://solana-api.projectserum.com",
-    "https://free.rpcpool.com",
-    "https://solana.public-rpc.com",
-    "https://mainnet.rpcpool.com",
   ], []);
   
   const endpoint = useMemo(() => endpoints[0], [endpoints]);
   
+  // Highly optimized configuration for speed
   const config = useMemo(() => ({
     commitment: 'processed' as const, // Using 'processed' for fastest confirmation
-    confirmTransactionInitialTimeout: 15000, // Reduced to 15000ms (15s) for much faster timeouts
+    confirmTransactionInitialTimeout: 10000, // Reduced to 10s for faster response
     disableRetryOnRateLimit: false,
     wsEndpoint: "wss://api.mainnet-beta.solana.com",
     httpHeaders: {
@@ -34,6 +30,7 @@ export const WalletContextProvider: FC<Props> = ({ children }) => {
     },
   }), []);
   
+  // Preload wallet adapter
   const wallets = useMemo(
     () => [
       new PhantomWalletAdapter(),

