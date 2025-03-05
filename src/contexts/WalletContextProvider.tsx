@@ -7,10 +7,9 @@ import '@solana/wallet-adapter-react-ui/styles.css';
 
 interface Props {
   children: ReactNode;
-  endpoint?: string;
 }
 
-export const WalletContextProvider: FC<Props> = ({ children, endpoint }) => {
+export const WalletContextProvider: FC<Props> = ({ children }) => {
   // Prioritize fastest and most reliable RPC endpoints
   const endpoints = useMemo(() => [
     "https://solana-mainnet.g.alchemy.com/v2/demo", // Alchemy is often faster
@@ -23,7 +22,7 @@ export const WalletContextProvider: FC<Props> = ({ children, endpoint }) => {
     "https://mainnet.rpcpool.com",
   ], []);
   
-  const selectedEndpoint = useMemo(() => endpoint || endpoints[0], [endpoint, endpoints]);
+  const endpoint = useMemo(() => endpoints[0], [endpoints]);
   
   const config = useMemo(() => ({
     commitment: 'processed' as const, // Using 'processed' for fastest confirmation
@@ -43,7 +42,7 @@ export const WalletContextProvider: FC<Props> = ({ children, endpoint }) => {
   );
 
   return (
-    <ConnectionProvider endpoint={selectedEndpoint} config={config}>
+    <ConnectionProvider endpoint={endpoint} config={config}>
       <WalletProvider wallets={wallets} autoConnect>
         <WalletModalProvider>{children}</WalletModalProvider>
       </WalletProvider>
