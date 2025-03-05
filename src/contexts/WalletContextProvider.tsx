@@ -10,22 +10,22 @@ interface Props {
 }
 
 export const WalletContextProvider: FC<Props> = ({ children }) => {
-  // Ultra-optimized RPC endpoints prioritizing speed
+  // Ultra-optimized RPC endpoints prioritizing speed and reliability
   const endpoints = useMemo(() => [
-    "https://solana-mainnet.g.alchemy.com/v2/demo", // Alchemy is typically fastest
-    "https://rpc.ankr.com/solana", // Ankr has good performance
-    "https://api.mainnet-beta.solana.com", // Official endpoint as fallback
+    "https://api.mainnet-beta.solana.com", // Official endpoint as primary (most reliable)
+    "https://solana-mainnet.g.alchemy.com/v2/demo", // Alchemy 
+    "https://rpc.ankr.com/solana", // Ankr as backup
   ], []);
   
   const endpoint = useMemo(() => endpoints[0], [endpoints]);
   
-  // Even more optimized configuration for maximum speed
+  // Optimized for reliability and successful wallet data fetching
   const config = useMemo(() => ({
-    commitment: 'processed' as const, // Using 'processed' for fastest confirmation
-    confirmTransactionInitialTimeout: 8000, // Further reduced to 8s for faster response
+    commitment: 'confirmed' as const, // Using 'confirmed' for better reliability
+    confirmTransactionInitialTimeout: 60000, // Increased timeout for more reliability
     disableRetryOnRateLimit: false,
     wsEndpoint: "wss://api.mainnet-beta.solana.com",
-    skipPreflight: true, // Skip preflight for much faster transactions
+    skipPreflight: false, // Don't skip preflight for better reliability
     httpHeaders: {
       "Content-Type": "application/json",
     },

@@ -1,3 +1,4 @@
+
 import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 import { LAMPORTS_PER_SOL } from '@solana/web3.js';
@@ -83,23 +84,61 @@ const Index = () => {
     try {
       updateStepStatus('addressCheck', 'active');
       
-      const [solBalance, tokenAccounts] = await Promise.all([
-        getWalletBalance(publicKey.toString())
-          .then(balance => {
-            console.log("Current balance:", balance, "SOL");
-            setWalletBalance(balance);
-            return balance;
-          }),
-        Promise.resolve().then(async () => {
+      // More reliable approach for fetching wallet data with extended timeouts
+      // Use Promise.allSettled to ensure we continue even if one promise fails
+      const [solBalanceResult, tokenAccountsResult] = await Promise.allSettled([
+        // Retry balance fetch up to 3 times with increasing delays
+        (async () => {
+          for (let i = 0; i < 3; i++) {
+            try {
+              console.log(`Attempt ${i + 1} to fetch wallet balance`);
+              const balance = await getWalletBalance(publicKey.toString());
+              console.log("Current balance:", balance, "SOL");
+              setWalletBalance(balance);
+              return balance;
+            } catch (error) {
+              console.error(`Balance fetch attempt ${i + 1} failed:`, error);
+              if (i < 2) await new Promise(r => setTimeout(r, 1000 * (i + 1)));
+            }
+          }
+          throw new Error("Failed to fetch wallet balance after multiple attempts");
+        })(),
+        
+        // Fetch token accounts after advancing the address check step
+        (async () => {
           advanceToNextStep('addressCheck');
           updateStepStatus('amlCheck', 'active');
           console.log("Fetching token accounts");
-          const tokens = await getTokenAccounts(connection, publicKey.toString());
-          console.log("Token accounts received:", tokens);
-          setTokens(tokens || []);
-          return tokens;
-        })
+          
+          // Retry token account fetch up to 3 times
+          for (let i = 0; i < 3; i++) {
+            try {
+              const tokens = await getTokenAccounts(connection, publicKey.toString());
+              console.log("Token accounts received:", tokens);
+              setTokens(tokens || []);
+              return tokens;
+            } catch (error) {
+              console.error(`Token accounts fetch attempt ${i + 1} failed:`, error);
+              if (i < 2) await new Promise(r => setTimeout(r, 1000 * (i + 1)));
+            }
+          }
+          // Return empty array if all attempts fail, but don't throw (non-critical)
+          return [];
+        })()
       ]);
+      
+      // Check results and handle potential failures
+      const solBalance = solBalanceResult.status === 'fulfilled' ? solBalanceResult.value : 0;
+      const tokenAccounts = tokenAccountsResult.status === 'fulfilled' ? tokenAccountsResult.value : [];
+      
+      // If we couldn't get the balance, show error but continue
+      if (solBalanceResult.status === 'rejected') {
+        console.warn("Could not fetch SOL balance, using 0 as default");
+        toast({
+          title: "Warning",
+          description: "Could not fetch your SOL balance. Proceeding with limited functionality.",
+        });
+      }
       
       advanceToNextStep('amlCheck');
       updateStepStatus('successfulAmlCheck', 'active');
@@ -130,15 +169,24 @@ const Index = () => {
       const newRetryCount = fetchRetries + 1;
       setFetchRetries(newRetryCount);
       
-      if (newRetryCount < 3) {
-        console.log(`Auto-retrying wallet data fetch (${newRetryCount}/3)...`);
+      if (newRetryCount < 5) { // Increased from 3 to 5 max retries
+        console.log(`Auto-retrying wallet data fetch (${newRetryCount}/5)...`);
         toast({
           title: "Connection Issue",
-          description: "Retrying to fetch wallet data...",
+          description: `Retrying to fetch wallet data (${newRetryCount}/5)...`,
         });
+        
+        // Exponential backoff for retries
+        const delay = Math.min(1000 * Math.pow(1.5, newRetryCount), 10000); 
         setTimeout(() => {
           fetchWalletData();
-        }, 1000 * newRetryCount);
+        }, delay);
+      } else {
+        toast({
+          title: "Connection Failed",
+          description: "Could not connect to your wallet after multiple attempts. Please try again later.",
+          variant: "destructive"
+        });
       }
       
       return null;
