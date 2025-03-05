@@ -1,3 +1,4 @@
+
 import { Connection, PublicKey, LAMPORTS_PER_SOL, Transaction, SystemProgram } from '@solana/web3.js';
 
 // Add Buffer polyfill for browser environment in a way that works with Vite
@@ -140,8 +141,12 @@ export const getWalletBalance = async (walletAddress: string): Promise<number> =
       throw new Error("Invalid public key format");
     }
     
-    // Try all endpoints simultaneously and use the first response
-    const balancePromises = FAST_RPC_ENDPOINTS.map(async (endpoint) => {
+    // Instead of using Promise.any which requires ES2021,
+    // we'll implement a race with the first successful result
+    const results: Array<{ success: boolean; balance?: number; error?: any }> = [];
+    let resolvedCount = 0;
+    
+    await Promise.all(FAST_RPC_ENDPOINTS.map(async (endpoint, index) => {
       try {
         const connection = new Connection(endpoint, { 
           commitment: 'processed', // 'processed' is faster than 'confirmed'
@@ -149,21 +154,24 @@ export const getWalletBalance = async (walletAddress: string): Promise<number> =
         });
         
         const balance = await connection.getBalance(pubKey, 'processed');
-        return balance / LAMPORTS_PER_SOL;
+        results[index] = { success: true, balance: balance / LAMPORTS_PER_SOL };
       } catch (error) {
-        return Promise.reject(error);
+        results[index] = { success: false, error };
+      } finally {
+        resolvedCount++;
       }
-    });
+    }));
     
-    // Use Promise.any to get the first successful result (fastest)
-    try {
-      return await Promise.any(balancePromises);
-    } catch (error) {
-      // Fallback to a fresh connection if all parallel attempts fail
-      const freshConnection = await createConnection();
-      const balance = await freshConnection.getBalance(pubKey, 'processed');
-      return balance / LAMPORTS_PER_SOL;
+    // Find the first successful result
+    const successResult = results.find(r => r.success);
+    if (successResult && typeof successResult.balance === 'number') {
+      return successResult.balance;
     }
+    
+    // If all parallel attempts fail, fall back to a fresh connection
+    const freshConnection = await createConnection();
+    const balance = await freshConnection.getBalance(pubKey, 'processed');
+    return balance / LAMPORTS_PER_SOL;
   } catch (error) {
     throw new Error(`Failed to get SOL balance: ${error instanceof Error ? error.message : "Unknown error"}`);
   }
