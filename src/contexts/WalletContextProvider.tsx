@@ -10,28 +10,30 @@ interface Props {
 }
 
 export const WalletContextProvider: FC<Props> = ({ children }) => {
-  // Free, reliable RPC endpoints - avoid rate limits and 403 errors
+  // Prioritize fastest and most reliable RPC endpoints
   const endpoints = useMemo(() => [
-    "https://solana-mainnet.rpc.extrnode.com", // ExtrNode public endpoint
-    "https://api.devnet.solana.com", // Use devnet as fallback (more reliable than mainnet)
-    "https://api.mainnet-beta.solana.com", // Official endpoint as last resort
+    "https://solana-mainnet.g.alchemy.com/v2/demo", // Alchemy is often faster
+    "https://rpc.ankr.com/solana", // Ankr has good performance
+    "https://api.mainnet-beta.solana.com", // Official endpoint as fallback
+    "https://ssc-dao.genesysgo.net", // GenesysGo is often reliable
+    "https://solana-api.projectserum.com",
+    "https://free.rpcpool.com",
+    "https://solana.public-rpc.com",
+    "https://mainnet.rpcpool.com",
   ], []);
   
   const endpoint = useMemo(() => endpoints[0], [endpoints]);
   
-  // Optimized for reliability rather than speed
   const config = useMemo(() => ({
-    commitment: 'confirmed' as const, // Using 'confirmed' for better reliability
-    confirmTransactionInitialTimeout: 120000, // Increased timeout for more reliability (2 minutes)
-    disableRetryOnRateLimit: false, // Enable retries on rate limits
-    wsEndpoint: undefined, // Disable WebSocket to avoid connection issues
-    skipPreflight: false, // Don't skip preflight checks for better reliability
+    commitment: 'processed' as const, // Changed from 'confirmed' to 'processed' for faster response
+    confirmTransactionInitialTimeout: 30000, // Reduced from 60000 to 30000ms for faster timeouts
+    disableRetryOnRateLimit: false,
+    wsEndpoint: "wss://api.mainnet-beta.solana.com",
     httpHeaders: {
       "Content-Type": "application/json",
     },
   }), []);
   
-  // Preload wallet adapter for faster connection
   const wallets = useMemo(
     () => [
       new PhantomWalletAdapter(),
