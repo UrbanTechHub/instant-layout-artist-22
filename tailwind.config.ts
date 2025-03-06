@@ -64,6 +64,12 @@ export default {
 					ring: 'hsl(var(--sidebar-ring))'
 				}
 			},
+			boxShadow: {
+				'card': '0 2px 20px -2px rgba(0, 0, 0, 0.05), 0 2px 10px -2px rgba(0, 0, 0, 0.04)',
+				'card-hover': '0 10px 40px -10px rgba(0, 0, 0, 0.1), 0 4px 20px -4px rgba(0, 0, 0, 0.06)',
+				'button': '0 2px 10px -2px rgba(0, 0, 0, 0.1)',
+				'button-hover': '0 6px 15px -3px rgba(0, 0, 0, 0.12)'
+			},
 			borderRadius: {
 				lg: 'var(--radius)',
 				md: 'calc(var(--radius) - 2px)',
