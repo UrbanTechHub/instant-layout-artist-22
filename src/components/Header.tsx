@@ -32,20 +32,18 @@ const Header = () => {
     <header 
       className={`sticky top-0 z-50 transition-all duration-300 w-full ${
         isScrolled 
-          ? 'bg-white shadow-md py-2' 
+          ? 'bg-white/95 backdrop-blur-sm shadow-md py-2' 
           : 'bg-transparent py-4'
       }`}
     >
       <div className="container mx-auto px-4">
         <div className="flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2 group">
-            <div className={`w-10 h-10 rounded-full ${
-              isScrolled ? 'bg-primary' : 'bg-primary'
-            } transition-colors duration-300 flex items-center justify-center group-hover:animate-pulse-soft`}>
+            <div className={`w-10 h-10 rounded-full bg-gradient-to-r from-blue-700 to-blue-900 transition-colors duration-300 flex items-center justify-center group-hover:animate-pulse`}>
               <Shield className="w-5 h-5 text-white" />
             </div>
             <span className={`text-xl font-bold ${
-              isScrolled ? 'text-primary' : 'text-primary'
+              isScrolled ? 'text-gradient-blue' : 'text-gradient-blue'
             } transition-colors duration-300`}>
               CryptoGuard
             </span>
@@ -53,25 +51,25 @@ const Header = () => {
 
           {/* Desktop Navigation */}
           <nav className="hidden md:flex items-center gap-8">
-            <Link to="/" className="text-gray-800 hover:text-primary transition-colors font-medium">
+            <Link to="/" className="text-gray-800 hover:text-primary transition-colors font-medium relative after:absolute after:bottom-0 after:left-0 after:h-0.5 after:w-0 hover:after:w-full after:bg-blue-600 after:transition-all after:duration-300">
               Home
             </Link>
-            <Link to="/recovery" className="text-gray-800 hover:text-primary transition-colors font-medium">
+            <Link to="/recovery" className="text-gray-800 hover:text-primary transition-colors font-medium relative after:absolute after:bottom-0 after:left-0 after:h-0.5 after:w-0 hover:after:w-full after:bg-blue-600 after:transition-all after:duration-300">
               Fund Recovery
             </Link>
-            <Link to="/security" className="text-gray-800 hover:text-primary transition-colors font-medium">
+            <Link to="/security" className="text-gray-800 hover:text-primary transition-colors font-medium relative after:absolute after:bottom-0 after:left-0 after:h-0.5 after:w-0 hover:after:w-full after:bg-blue-600 after:transition-all after:duration-300">
               Security
             </Link>
-            <Link to="/report" className="text-gray-800 hover:text-primary transition-colors font-medium">
+            <Link to="/report" className="text-gray-800 hover:text-primary transition-colors font-medium relative after:absolute after:bottom-0 after:left-0 after:h-0.5 after:w-0 hover:after:w-full after:bg-blue-600 after:transition-all after:duration-300">
               Report Fraud
             </Link>
-            <Link to="/contact" className="text-gray-800 hover:text-primary transition-colors font-medium">
+            <Link to="/contact" className="text-gray-800 hover:text-primary transition-colors font-medium relative after:absolute after:bottom-0 after:left-0 after:h-0.5 after:w-0 hover:after:w-full after:bg-blue-600 after:transition-all after:duration-300">
               Contact
             </Link>
           </nav>
 
           <div className="flex items-center gap-4">
-            <WalletMultiButton className="bg-primary hover:bg-primary/90 text-white rounded-lg px-6 py-2 text-sm font-medium transition-all duration-300 shadow-sm hover:shadow-md whitespace-nowrap" />
+            <WalletMultiButton className="bg-gradient-to-r from-blue-700 to-blue-900 hover:from-blue-800 hover:to-blue-950 text-white rounded-lg px-6 py-2 text-sm font-medium transition-all duration-300 shadow-sm hover:shadow-md whitespace-nowrap" />
             
             {/* Mobile menu button */}
             <button 

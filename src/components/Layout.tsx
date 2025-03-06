@@ -12,12 +12,29 @@ const Layout = ({ children }: LayoutProps) => {
   useEffect(() => {
     // Add animation class to sections
     const sections = document.querySelectorAll('section');
-    sections.forEach((section, index) => {
-      setTimeout(() => {
-        section.classList.add('opacity-100');
-        section.classList.remove('opacity-0', 'translate-y-4');
-      }, 200 * index);
-    });
+    const animateOnScroll = () => {
+      sections.forEach((section) => {
+        // Get position of each section
+        const sectionTop = section.getBoundingClientRect().top;
+        const windowHeight = window.innerHeight;
+        
+        // If section is in viewport
+        if (sectionTop < windowHeight * 0.85) {
+          section.classList.add('opacity-100');
+          section.classList.remove('opacity-0', 'translate-y-8');
+        }
+      });
+    };
+
+    // Initial check
+    setTimeout(animateOnScroll, 300);
+    
+    // Add scroll event listener
+    window.addEventListener('scroll', animateOnScroll);
+    
+    return () => {
+      window.removeEventListener('scroll', animateOnScroll);
+    };
   }, []);
 
   return (
