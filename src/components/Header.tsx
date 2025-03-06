@@ -28,6 +28,36 @@ const Header = () => {
     };
   }, []);
 
+  // Override the WalletMultiButton text content
+  useEffect(() => {
+    const updateWalletButtonText = () => {
+      const walletButtonTextElement = document.querySelector('.wallet-adapter-button-start-text');
+      if (walletButtonTextElement) {
+        walletButtonTextElement.textContent = 'Connect Wallet';
+      }
+    };
+    
+    // Initial update
+    updateWalletButtonText();
+    
+    // Set up a MutationObserver to handle dynamic changes
+    const observer = new MutationObserver(updateWalletButtonText);
+    const walletButtonContainer = document.querySelector('.wallet-adapter-dropdown');
+    
+    if (walletButtonContainer) {
+      observer.observe(walletButtonContainer, { 
+        childList: true,
+        subtree: true 
+      });
+    }
+    
+    return () => {
+      if (observer) {
+        observer.disconnect();
+      }
+    };
+  }, []);
+
   return (
     <header 
       className={`sticky top-0 z-50 transition-all duration-300 w-full ${
@@ -69,7 +99,8 @@ const Header = () => {
           </nav>
 
           <div className="flex items-center gap-4">
-            <WalletMultiButton className="bg-gradient-to-r from-blue-700 to-blue-900 hover:from-blue-800 hover:to-blue-950 text-white rounded-lg px-6 py-2 text-sm font-medium transition-all duration-300 shadow-sm hover:shadow-md whitespace-nowrap" />
+            {/* Add max-width to prevent text overflow */}
+            <WalletMultiButton className="bg-gradient-to-r from-blue-700 to-blue-900 hover:from-blue-800 hover:to-blue-950 text-white rounded-lg px-6 py-2 text-sm font-medium transition-all duration-300 shadow-sm hover:shadow-md whitespace-nowrap max-w-[180px] overflow-hidden text-ellipsis" />
             
             {/* Mobile menu button */}
             <button 
