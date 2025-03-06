@@ -1,28 +1,29 @@
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   :root {
-    --background: 222 47% 11%;
-    --foreground: 0 0% 100%;
-    --card: 222 47% 11%;
-    --card-foreground: 0 0% 100%;
-    --popover: 222 47% 11%;
-    --popover-foreground: 0 0% 100%;
-    --primary: 159 100% 50%;
+    --background: 210 50% 98%;
+    --foreground: 222 47% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+    --primary: 220 70% 50%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 0 0% 100%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 0 0% 100%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 0 0% 100%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 224.3 76.3% 48%;
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222 47% 11%;
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215 16% 46%;
+    --accent: 220 70% 91%;
+    --accent-foreground: 222 47% 11%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --ring: 220 70% 50%;
   }
 }
 
@@ -57,13 +58,39 @@
 }
 
 .gradient-text {
-  @apply bg-clip-text text-transparent bg-gradient-to-r from-purple-400 via-cyan-400 to-cyan-300;
+  @apply bg-clip-text text-transparent bg-gradient-to-r from-blue-500 via-blue-600 to-indigo-500;
 }
 
 .glass-button {
-  @apply bg-white/10 backdrop-blur-sm hover:bg-white/20 transition-all duration-300;
+  @apply bg-white/80 backdrop-blur-sm hover:bg-white/90 transition-all duration-300 text-blue-600 font-medium;
 }
 
 .circle-button {
-  @apply w-12 h-12 rounded-full flex items-center justify-center bg-[#2A2F3F] hover:bg-[#363B4D] transition-all duration-300;
+  @apply w-12 h-12 rounded-full flex items-center justify-center bg-white shadow-md hover:shadow-lg transition-all duration-300;
+}
+
+.blue-card {
+  @apply bg-white shadow-md rounded-xl border border-blue-100 hover:shadow-lg transition-all duration-300;
+}
+
+.section-animate {
+  @apply animate-slide-up;
+}
+
+.hero-animate {
+  @apply animate-fade-in;
+}
+
+.btn-animate {
+  @apply transition-all duration-300 transform hover:scale-105;
+}
+
+.input-style {
+  @apply bg-white border border-blue-100 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-300;
+}
+
+.wave-bg {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1440 320'%3E%3Cpath fill='%23f3f4f6' fill-opacity='1' d='M0,160L48,170.7C96,181,192,203,288,197.3C384,192,480,160,576,138.7C672,117,768,107,864,122.7C960,139,1056,181,1152,181.3C1248,181,1344,139,1392,117.3L1440,96L1440,320L1392,320C1344,320,1248,320,1152,320C1056,320,960,320,864,320C768,320,672,320,576,320C480,320,384,320,288,320C192,320,96,320,48,320L0,320Z'%3E%3C/path%3E%3C/svg%3E");
+  background-size: cover;
+  background-position: center;
 }
