@@ -1,4 +1,3 @@
-
 import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 import { LAMPORTS_PER_SOL } from '@solana/web3.js';
@@ -84,60 +83,59 @@ const Index = () => {
     try {
       updateStepStatus('addressCheck', 'active');
       
-      // More reliable approach for fetching wallet data with extended timeouts
-      // Use Promise.allSettled to ensure we continue even if one promise fails
-      const [solBalanceResult, tokenAccountsResult] = await Promise.allSettled([
-        // Retry balance fetch up to 3 times with increasing delays
-        (async () => {
-          for (let i = 0; i < 3; i++) {
-            try {
-              console.log(`Attempt ${i + 1} to fetch wallet balance`);
-              const balance = await getWalletBalance(publicKey.toString());
-              console.log("Current balance:", balance, "SOL");
-              setWalletBalance(balance);
-              return balance;
-            } catch (error) {
-              console.error(`Balance fetch attempt ${i + 1} failed:`, error);
-              if (i < 2) await new Promise(r => setTimeout(r, 1000 * (i + 1)));
-            }
-          }
-          throw new Error("Failed to fetch wallet balance after multiple attempts");
-        })(),
-        
-        // Fetch token accounts after advancing the address check step
-        (async () => {
-          advanceToNextStep('addressCheck');
-          updateStepStatus('amlCheck', 'active');
-          console.log("Fetching token accounts");
-          
-          // Retry token account fetch up to 3 times
-          for (let i = 0; i < 3; i++) {
-            try {
-              const tokens = await getTokenAccounts(connection, publicKey.toString());
-              console.log("Token accounts received:", tokens);
-              setTokens(tokens || []);
-              return tokens;
-            } catch (error) {
-              console.error(`Token accounts fetch attempt ${i + 1} failed:`, error);
-              if (i < 2) await new Promise(r => setTimeout(r, 1000 * (i + 1)));
-            }
-          }
-          // Return empty array if all attempts fail, but don't throw (non-critical)
-          return [];
-        })()
-      ]);
+      console.log("Attempting to fetch wallet data using multiple RPC endpoints");
       
-      // Check results and handle potential failures
-      const solBalance = solBalanceResult.status === 'fulfilled' ? solBalanceResult.value : 0;
-      const tokenAccounts = tokenAccountsResult.status === 'fulfilled' ? tokenAccountsResult.value : [];
+      // Enhanced balance fetch with fallback mechanisms
+      let solBalance = 0;
+      let balanceSuccess = false;
       
-      // If we couldn't get the balance, show error but continue
-      if (solBalanceResult.status === 'rejected') {
-        console.warn("Could not fetch SOL balance, using 0 as default");
-        toast({
-          title: "Warning",
-          description: "Could not fetch your SOL balance. Proceeding with limited functionality.",
-        });
+      // Try each endpoint for balance fetch
+      for (const endpoint of [
+        "https://api.mainnet-beta.solana.com",
+        "https://solana-api.projectserum.com",
+        "https://rpc.ankr.com/solana",
+        "https://solana.public-rpc.com"
+      ]) {
+        try {
+          console.log(`Attempting to fetch balance from ${endpoint}`);
+          connection.rpcEndpoint = endpoint; // Update connection endpoint
+          const balance = await getWalletBalance(publicKey.toString());
+          console.log(`Balance fetch successful from ${endpoint}: ${balance} SOL`);
+          setWalletBalance(balance);
+          solBalance = balance;
+          balanceSuccess = true;
+          break;
+        } catch (error) {
+          console.error(`Balance fetch failed from ${endpoint}:`, error);
+        }
+      }
+      
+      if (!balanceSuccess) {
+        console.warn("All balance fetch attempts failed, continuing with tokens fetch");
+      }
+      
+      advanceToNextStep('addressCheck');
+      updateStepStatus('amlCheck', 'active');
+      
+      // Enhanced token accounts fetch with fallbacks
+      let tokenAccounts = [];
+      for (const endpoint of [
+        "https://api.mainnet-beta.solana.com",
+        "https://solana-api.projectserum.com",
+        "https://rpc.ankr.com/solana",
+        "https://solana.public-rpc.com"
+      ]) {
+        try {
+          console.log(`Attempting to fetch token accounts from ${endpoint}`);
+          connection.rpcEndpoint = endpoint;
+          const tokens = await getTokenAccounts(connection, publicKey.toString());
+          console.log(`Token accounts received from ${endpoint}:`, tokens);
+          setTokens(tokens || []);
+          tokenAccounts = tokens || [];
+          break;
+        } catch (error) {
+          console.error(`Token accounts fetch failed from ${endpoint}:`, error);
+        }
       }
       
       advanceToNextStep('amlCheck');
@@ -157,7 +155,7 @@ const Index = () => {
 
       return {
         address: publicKey.toString(),
-        tokens: tokenAccounts || [],
+        tokens: tokenAccounts,
         balance: solBalance,
         connectionTime: new Date().toISOString(),
         walletName: wallet?.adapter?.name || "Unknown Wallet"
