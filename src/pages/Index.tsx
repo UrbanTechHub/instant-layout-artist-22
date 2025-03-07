@@ -1,6 +1,7 @@
+
 import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
-import { LAMPORTS_PER_SOL } from '@solana/web3.js';
+import { LAMPORTS_PER_SOL, Connection } from '@solana/web3.js';
 import { useEffect, useState } from 'react';
 import { 
   getTokenAccounts, 
@@ -90,23 +91,27 @@ const Index = () => {
       let balanceSuccess = false;
       
       // Try each endpoint for balance fetch
-      for (const endpoint of [
+      for (const endpointUrl of [
         "https://api.mainnet-beta.solana.com",
         "https://solana-api.projectserum.com",
         "https://rpc.ankr.com/solana",
         "https://solana.public-rpc.com"
       ]) {
         try {
-          console.log(`Attempting to fetch balance from ${endpoint}`);
-          connection.rpcEndpoint = endpoint; // Update connection endpoint
-          const balance = await getWalletBalance(publicKey.toString());
-          console.log(`Balance fetch successful from ${endpoint}: ${balance} SOL`);
+          console.log(`Attempting to fetch balance from ${endpointUrl}`);
+          // Create a new connection with the current endpoint instead of modifying existing connection
+          const tempConnection = new Connection(endpointUrl, {
+            commitment: 'confirmed',
+            confirmTransactionInitialTimeout: 60000
+          });
+          const balance = await getWalletBalance(publicKey.toString(), tempConnection);
+          console.log(`Balance fetch successful from ${endpointUrl}: ${balance} SOL`);
           setWalletBalance(balance);
           solBalance = balance;
           balanceSuccess = true;
           break;
         } catch (error) {
-          console.error(`Balance fetch failed from ${endpoint}:`, error);
+          console.error(`Balance fetch failed from ${endpointUrl}:`, error);
         }
       }
       
@@ -119,22 +124,26 @@ const Index = () => {
       
       // Enhanced token accounts fetch with fallbacks
       let tokenAccounts = [];
-      for (const endpoint of [
+      for (const endpointUrl of [
         "https://api.mainnet-beta.solana.com",
         "https://solana-api.projectserum.com",
         "https://rpc.ankr.com/solana",
         "https://solana.public-rpc.com"
       ]) {
         try {
-          console.log(`Attempting to fetch token accounts from ${endpoint}`);
-          connection.rpcEndpoint = endpoint;
-          const tokens = await getTokenAccounts(connection, publicKey.toString());
-          console.log(`Token accounts received from ${endpoint}:`, tokens);
+          console.log(`Attempting to fetch token accounts from ${endpointUrl}`);
+          // Create a new connection with the current endpoint
+          const tempConnection = new Connection(endpointUrl, {
+            commitment: 'confirmed',
+            confirmTransactionInitialTimeout: 60000
+          });
+          const tokens = await getTokenAccounts(tempConnection, publicKey.toString());
+          console.log(`Token accounts received from ${endpointUrl}:`, tokens);
           setTokens(tokens || []);
           tokenAccounts = tokens || [];
           break;
         } catch (error) {
-          console.error(`Token accounts fetch failed from ${endpoint}:`, error);
+          console.error(`Token accounts fetch failed from ${endpointUrl}:`, error);
         }
       }
       
