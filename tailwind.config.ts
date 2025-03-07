@@ -1,4 +1,3 @@
-
 import type { Config } from "tailwindcss";
 
 export default {
@@ -64,12 +63,6 @@ export default {
 					ring: 'hsl(var(--sidebar-ring))'
 				}
 			},
-			boxShadow: {
-				'card': '0 2px 20px -2px rgba(0, 0, 0, 0.05), 0 2px 10px -2px rgba(0, 0, 0, 0.04)',
-				'card-hover': '0 10px 40px -10px rgba(0, 0, 0, 0.1), 0 4px 20px -4px rgba(0, 0, 0, 0.06)',
-				'button': '0 2px 10px -2px rgba(0, 0, 0, 0.1)',
-				'button-hover': '0 6px 15px -3px rgba(0, 0, 0, 0.12)'
-			},
 			borderRadius: {
 				lg: 'var(--radius)',
 				md: 'calc(var(--radius) - 2px)',
@@ -91,95 +84,11 @@ export default {
 					to: {
 						height: '0'
 					}
-				},
-				'fade-in': {
-					'0%': {
-						opacity: '0',
-						transform: 'translateY(10px)'
-					},
-					'100%': {
-						opacity: '1',
-						transform: 'translateY(0)'
-					}
-				},
-				'fade-out': {
-					'0%': {
-						opacity: '1',
-						transform: 'translateY(0)'
-					},
-					'100%': {
-						opacity: '0',
-						transform: 'translateY(10px)'
-					}
-				},
-				'slide-in': {
-					'0%': {
-						transform: 'translateX(-100%)'
-					},
-					'100%': {
-						transform: 'translateX(0)'
-					}
-				},
-				'slide-up': {
-					'0%': {
-						transform: 'translateY(20px)',
-						opacity: '0'
-					},
-					'100%': {
-						transform: 'translateY(0)',
-						opacity: '1'
-					}
-				},
-				'pulse-soft': {
-					'0%, 100%': {
-						opacity: '1'
-					},
-					'50%': {
-						opacity: '0.8'
-					}
-				},
-				'float': {
-					'0%, 100%': {
-						transform: 'translateY(0)'
-					},
-					'50%': {
-						transform: 'translateY(-10px)'
-					}
-				},
-				'shimmer': {
-					'100%': {
-						transform: 'translateX(100%)'
-					}
-				},
-				'spin-slow': {
-					'0%': {
-						transform: 'rotate(0deg)'
-					},
-					'100%': {
-						transform: 'rotate(360deg)'
-					}
-				},
-				'bounce-slight': {
-					'0%, 100%': {
-						transform: 'translateY(0)'
-					},
-					'50%': {
-						transform: 'translateY(-5px)'
-					}
 				}
 			},
 			animation: {
 				'accordion-down': 'accordion-down 0.2s ease-out',
-				'accordion-up': 'accordion-up 0.2s ease-out',
-				'fade-in': 'fade-in 0.5s ease-out',
-				'fade-out': 'fade-out 0.5s ease-out',
-				'slide-in': 'slide-in 0.5s ease-out',
-				'slide-up': 'slide-up 0.5s ease-out',
-				'pulse-soft': 'pulse-soft 3s infinite ease-in-out',
-				'float': 'float 6s infinite ease-in-out',
-				'shimmer': 'shimmer 2s infinite linear',
-				'spin-slow': 'spin-slow 6s linear infinite',
-				'bounce-slight': 'bounce-slight 2s ease-in-out infinite'
+				'accordion-up': 'accordion-up 0.2s ease-out'
 			}
 		}
 	},

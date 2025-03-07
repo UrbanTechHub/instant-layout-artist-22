@@ -15,46 +15,46 @@ const Index = () => {
         <div className="container mx-auto max-w-6xl">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
             <div>
-              <h1 className="heading-1 mb-6 gradient-text">
+              <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold leading-tight mb-6 gradient-text">
                 Crypto Recovery & Security Solutions
               </h1>
-              <p className="body-large mb-8">
+              <p className="text-xl text-gray-300 mb-8">
                 Professional assistance in recovering lost crypto funds, fixing wallet issues, and 
                 enhancing your digital asset security.
               </p>
               <div className="flex flex-col sm:flex-row gap-4">
                 {!connected ? (
-                  <WalletMultiButton className="primary-button" />
+                  <WalletMultiButton className="bg-gradient-to-r from-cyan-500 to-purple-500 text-white px-6 py-3 rounded-xl text-lg font-medium hover:opacity-90 transition-opacity" />
                 ) : (
                   <Link 
                     to="/recovery" 
-                    className="primary-button block text-center"
+                    className="bg-gradient-to-r from-cyan-500 to-purple-500 text-white px-6 py-3 rounded-xl text-lg font-medium hover:opacity-90 transition-opacity text-center"
                   >
                     Start Recovery Process
                   </Link>
                 )}
                 <Link 
                   to="/contact" 
-                  className="secondary-button block text-center"
+                  className="border border-white/20 bg-white/5 text-white px-6 py-3 rounded-xl text-lg font-medium hover:bg-white/10 transition-colors text-center"
                 >
                   Contact Support
                 </Link>
               </div>
             </div>
             <div className="relative">
-              <div className="absolute inset-0 bg-blue-500/10 rounded-3xl blur-3xl"></div>
-              <div className="relative bg-white/95 shadow-lg border border-blue-100 p-8 rounded-2xl">
-                <div className="w-16 h-16 rounded-full bg-gradient-to-r from-blue-500 to-blue-600 p-[2px] mx-auto mb-6">
-                  <div className="w-full h-full rounded-full bg-white flex items-center justify-center">
-                    <Shield className="w-8 h-8 text-blue-500" />
+              <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/20 to-purple-500/20 rounded-3xl blur-3xl"></div>
+              <div className="relative bg-black/40 backdrop-blur-xl border border-white/10 p-8 rounded-3xl">
+                <div className="w-16 h-16 rounded-full bg-gradient-to-r from-cyan-400 to-purple-500 p-[2px] mx-auto mb-6">
+                  <div className="w-full h-full rounded-full bg-background flex items-center justify-center">
+                    <Shield className="w-8 h-8 text-cyan-400" />
                   </div>
                 </div>
-                <h2 className="heading-2 text-center mb-6">Connect Your Wallet</h2>
-                <p className="body-normal text-center mb-8">
+                <h2 className="text-2xl font-bold text-center mb-6">Connect Your Wallet</h2>
+                <p className="text-gray-400 text-center mb-8">
                   Connect your wallet to access our recovery services, security audit tools, and specialized support.
                 </p>
                 <div className="flex justify-center">
-                  <WalletMultiButton className="primary-button" />
+                  <WalletMultiButton className="glass-button text-cyan-400 py-4 px-8 rounded-xl text-xl font-semibold" />
                 </div>
               </div>
             </div>
@@ -63,13 +63,13 @@ const Index = () => {
       </section>
 
       {/* Services Section */}
-      <section className="py-16 px-4 bg-blue-50">
+      <section className="py-16 px-4 bg-black/20">
         <div className="container mx-auto max-w-6xl">
           <div className="text-center mb-16">
-            <h2 className="heading-2 mb-4 gradient-text">
+            <h2 className="text-3xl md:text-4xl font-bold mb-4 bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 to-purple-400">
               Our Services
             </h2>
-            <p className="body-large max-w-2xl mx-auto">
+            <p className="text-xl text-gray-300 max-w-2xl mx-auto">
               Comprehensive solutions for all your crypto security and recovery needs
             </p>
           </div>
@@ -78,18 +78,18 @@ const Index = () => {
             {services.map((service, index) => (
               <div 
                 key={index} 
-                className="feature-card hover:translate-y-[-5px]"
+                className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl p-6 hover:bg-white/10 transition-all duration-300"
               >
-                <div className="w-12 h-12 rounded-full bg-gradient-to-r from-blue-500 to-blue-600 p-[2px] mb-6">
-                  <div className="w-full h-full rounded-full bg-white flex items-center justify-center">
-                    <service.icon className="w-6 h-6 text-blue-500" />
+                <div className="w-12 h-12 rounded-full bg-gradient-to-r from-cyan-400 to-purple-500 p-[2px] mb-6">
+                  <div className="w-full h-full rounded-full bg-background flex items-center justify-center">
+                    <service.icon className="w-6 h-6 text-cyan-400" />
                   </div>
                 </div>
-                <h3 className="heading-3 mb-3">{service.title}</h3>
-                <p className="body-normal mb-4">{service.description}</p>
+                <h3 className="text-xl font-bold mb-3">{service.title}</h3>
+                <p className="text-gray-400 mb-4">{service.description}</p>
                 <Link 
                   to={service.link} 
-                  className="text-blue-600 flex items-center gap-2 hover:text-blue-700 transition-colors"
+                  className="text-cyan-400 flex items-center gap-2 hover:text-cyan-300 transition-colors"
                 >
                   Learn more
                   <span className="text-xs">→</span>
@@ -104,10 +104,10 @@ const Index = () => {
       <section className="py-16 px-4">
         <div className="container mx-auto max-w-6xl">
           <div className="text-center mb-16">
-            <h2 className="heading-2 mb-4 gradient-text">
+            <h2 className="text-3xl md:text-4xl font-bold mb-4 bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 to-purple-400">
               How It Works
             </h2>
-            <p className="body-large max-w-2xl mx-auto">
+            <p className="text-xl text-gray-300 max-w-2xl mx-auto">
               Our proven process to recover your crypto assets and secure your wallet
             </p>
           </div>
@@ -116,16 +116,16 @@ const Index = () => {
             {steps.map((step, index) => (
               <div key={index} className="relative">
                 {index < steps.length - 1 && (
-                  <div className="hidden md:block absolute top-10 left-full w-full h-0.5 bg-gradient-to-r from-blue-500 to-transparent z-0"></div>
+                  <div className="hidden md:block absolute top-10 left-full w-full h-0.5 bg-gradient-to-r from-cyan-500 to-transparent z-0"></div>
                 )}
                 <div className="relative z-10 flex flex-col items-center text-center">
-                  <div className="w-20 h-20 rounded-full bg-gradient-to-r from-blue-500 to-blue-600 p-[2px] mb-6 flex items-center justify-center">
-                    <div className="w-full h-full rounded-full bg-white flex items-center justify-center">
-                      <span className="text-2xl font-bold text-blue-500">{index + 1}</span>
+                  <div className="w-20 h-20 rounded-full bg-gradient-to-r from-cyan-500 to-purple-500 p-[2px] mb-6 flex items-center justify-center">
+                    <div className="w-full h-full rounded-full bg-background flex items-center justify-center">
+                      <span className="text-2xl font-bold text-cyan-400">{index + 1}</span>
                     </div>
                   </div>
-                  <h3 className="heading-3 mb-3">{step.title}</h3>
-                  <p className="body-normal">{step.description}</p>
+                  <h3 className="text-xl font-bold mb-3">{step.title}</h3>
+                  <p className="text-gray-400">{step.description}</p>
                 </div>
               </div>
             ))}
@@ -134,13 +134,13 @@ const Index = () => {
       </section>
 
       {/* Testimonials */}
-      <section className="py-16 px-4 bg-blue-50">
+      <section className="py-16 px-4 bg-black/20">
         <div className="container mx-auto max-w-6xl">
           <div className="text-center mb-16">
-            <h2 className="heading-2 mb-4 gradient-text">
+            <h2 className="text-3xl md:text-4xl font-bold mb-4 bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 to-purple-400">
               Success Stories
             </h2>
-            <p className="body-large max-w-2xl mx-auto">
+            <p className="text-xl text-gray-300 max-w-2xl mx-auto">
               See how we've helped others recover their crypto assets
             </p>
           </div>
@@ -149,20 +149,20 @@ const Index = () => {
             {testimonials.map((testimonial, index) => (
               <div 
                 key={index} 
-                className="feature-card"
+                className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl p-6"
               >
                 <div className="flex items-center gap-3 mb-4">
-                  <div className="w-12 h-12 rounded-full bg-gradient-to-r from-blue-500 to-blue-600 p-[2px]">
-                    <div className="w-full h-full rounded-full bg-white flex items-center justify-center text-blue-600 font-bold">
+                  <div className="w-12 h-12 rounded-full bg-gradient-to-r from-cyan-400 to-purple-500 p-[2px]">
+                    <div className="w-full h-full rounded-full bg-background flex items-center justify-center text-white font-bold">
                       {testimonial.name.charAt(0)}
                     </div>
                   </div>
                   <div>
                     <h4 className="font-semibold">{testimonial.name}</h4>
-                    <p className="text-sm text-gray-500">{testimonial.title}</p>
+                    <p className="text-sm text-gray-400">{testimonial.title}</p>
                   </div>
                 </div>
-                <p className="text-gray-600 italic">"{testimonial.content}"</p>
+                <p className="text-gray-300 italic">"{testimonial.content}"</p>
                 <div className="mt-4 flex">
                   {[...Array(5)].map((_, i) => (
                     <span key={i} className="text-yellow-400">★</span>
@@ -177,18 +177,18 @@ const Index = () => {
       {/* CTA */}
       <section className="py-20 px-4">
         <div className="container mx-auto max-w-4xl text-center">
-          <div className="bg-gradient-to-r from-blue-500 to-blue-700 rounded-2xl shadow-lg p-12">
-            <h2 className="text-3xl md:text-4xl font-bold mb-6 text-white">
+          <div className="bg-gradient-to-r from-cyan-900/30 to-purple-900/30 backdrop-blur-xl border border-white/10 rounded-3xl p-12">
+            <h2 className="text-3xl md:text-4xl font-bold mb-6 bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 to-purple-400">
               Ready to Recover Your Crypto Assets?
             </h2>
-            <p className="text-xl text-white/90 mb-8 max-w-2xl mx-auto">
+            <p className="text-xl text-gray-300 mb-8 max-w-2xl mx-auto">
               Connect your wallet or contact our team to get started with your recovery process today.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <WalletMultiButton className="bg-white text-blue-600 px-6 py-3 rounded-xl text-lg font-medium hover:bg-blue-50 transition-opacity whitespace-nowrap" />
+              <WalletMultiButton className="bg-gradient-to-r from-cyan-500 to-purple-500 text-white px-6 py-3 rounded-xl text-lg font-medium hover:opacity-90 transition-opacity" />
               <Link 
                 to="/contact" 
-                className="border border-white/30 bg-blue-600/30 text-white px-6 py-3 rounded-xl text-lg font-medium hover:bg-blue-600/40 transition-colors whitespace-nowrap"
+                className="border border-white/20 bg-white/5 text-white px-6 py-3 rounded-xl text-lg font-medium hover:bg-white/10 transition-colors"
               >
                 Contact Support
               </Link>
