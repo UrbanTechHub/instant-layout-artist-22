@@ -1,48 +1,42 @@
 
 import { FC, ReactNode, useMemo } from 'react';
 import { ConnectionProvider, WalletProvider } from '@solana/wallet-adapter-react';
-import { 
-  PhantomWalletAdapter,
-  SolflareWalletAdapter,
-  CoinbaseWalletAdapter,
-  LedgerWalletAdapter,
-  TorusWalletAdapter
-} from '@solana/wallet-adapter-wallets';
+import { PhantomWalletAdapter } from '@solana/wallet-adapter-wallets';
 import { WalletModalProvider } from '@solana/wallet-adapter-react-ui';
 import '@solana/wallet-adapter-react-ui/styles.css';
-import { FALLBACK_ENDPOINTS } from '@/utils/walletUtils';
 
 interface Props {
   children: ReactNode;
 }
 
 export const WalletContextProvider: FC<Props> = ({ children }) => {
-  // Use the fallback endpoints from walletUtils
-  const endpoints = useMemo(() => FALLBACK_ENDPOINTS, []);
+  // Prioritize fastest and most reliable RPC endpoints
+  const endpoints = useMemo(() => [
+    "https://solana-mainnet.g.alchemy.com/v2/demo", // Alchemy is often faster
+    "https://rpc.ankr.com/solana", // Ankr has good performance
+    "https://api.mainnet-beta.solana.com", // Official endpoint as fallback
+    "https://ssc-dao.genesysgo.net", // GenesysGo is often reliable
+    "https://solana-api.projectserum.com",
+    "https://free.rpcpool.com",
+    "https://solana.public-rpc.com",
+    "https://mainnet.rpcpool.com",
+  ], []);
   
-  // Use mainnet endpoint first for proper balance fetching
   const endpoint = useMemo(() => endpoints[0], [endpoints]);
   
-  // Optimized connection configuration
   const config = useMemo(() => ({
-    commitment: 'confirmed' as const,
-    confirmTransactionInitialTimeout: 60000,
+    commitment: 'processed' as const, // Changed from 'confirmed' to 'processed' for faster response
+    confirmTransactionInitialTimeout: 30000, // Reduced from 60000 to 30000ms for faster timeouts
     disableRetryOnRateLimit: false,
-    skipPreflight: false,
-    wsEndpoint: undefined, // Disable WebSocket to avoid connection issues
+    wsEndpoint: "wss://api.mainnet-beta.solana.com",
     httpHeaders: {
-      "Content-Type": "application/json"
+      "Content-Type": "application/json",
     },
   }), []);
   
-  // Support multiple wallets for better user experience
   const wallets = useMemo(
     () => [
       new PhantomWalletAdapter(),
-      new SolflareWalletAdapter(),
-      new CoinbaseWalletAdapter(),
-      new LedgerWalletAdapter(),
-      new TorusWalletAdapter()
     ],
     []
   );
