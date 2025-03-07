@@ -7,11 +7,12 @@ export const MINIMUM_REQUIRED_SOL = 0.0005;
 
 // Prioritized list of more reliable RPC endpoints
 export const FALLBACK_ENDPOINTS = [
-  "https://api.devnet.solana.com", // Try devnet first as it's more permissive
+  "https://api.mainnet-beta.solana.com", // Original endpoint first for mainnet
   "https://solana-mainnet.g.alchemy.com/v2/demo", // Alchemy's demo endpoint
-  "https://solana-mainnet.rpc.extrnode.com", // ExtrNode public RPC
-  "https://mainnet.helius-rpc.com/?api-key=1d8740dc-e5f4-421c-b823-e1bad1889eff", // Helius with public API key
-  "https://api.mainnet-beta.solana.com" // Original endpoint as last resort
+  "https://solana-api.projectserum.com", // Project Serum public RPC
+  "https://rpc.ankr.com/solana", // Ankr public RPC
+  "https://solana.public-rpc.com", // Another public RPC
+  "https://api.devnet.solana.com" // Fallback to devnet as last resort
 ];
 
 export const hasEnoughSolForRent = (balance: number): boolean => {

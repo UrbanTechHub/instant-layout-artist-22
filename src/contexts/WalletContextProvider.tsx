@@ -20,7 +20,7 @@ export const WalletContextProvider: FC<Props> = ({ children }) => {
   // Use the fallback endpoints from walletUtils
   const endpoints = useMemo(() => FALLBACK_ENDPOINTS, []);
   
-  // Cycle through endpoints if one fails, starting with devnet for testing
+  // Use mainnet endpoint first for proper balance fetching
   const endpoint = useMemo(() => endpoints[0], [endpoints]);
   
   // Optimized connection configuration
