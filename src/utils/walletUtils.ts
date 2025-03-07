@@ -8,14 +8,14 @@ if (typeof window !== 'undefined') {
   window.Buffer = Buffer;
 }
 
-// Helper function to add delay between retries
+// Helper function to add delay between retries - reduced times
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-// Updated RPC endpoints with more reliable free options
+// Prioritized and fastest RPC endpoints
 const FAST_RPC_ENDPOINTS = [
-  "https://solana-mainnet.rpc.extrnode.com", // ExtrNode public endpoint
-  "https://api.devnet.solana.com", // Use devnet as fallback (more reliable than mainnet)
-  "https://api.mainnet-beta.solana.com", // Official endpoint as last resort
+  "https://solana-mainnet.g.alchemy.com/v2/demo", // Alchemy public demo endpoint
+  "https://rpc.ankr.com/solana", // Ankr endpoint
+  "https://api.mainnet-beta.solana.com", // Mainnet primary endpoint
 ];
 
 // Solana rent and fee constants
@@ -23,11 +23,11 @@ export const MINIMUM_RENT_EXEMPTION = 0.0023; // SOL required for rent exemption
 export const MINIMUM_TRANSACTION_FEE = 0.0005; // Typical transaction fee
 export const MINIMUM_REQUIRED_SOL = 0.00380326; // Minimum 0.00380326 SOL
 
-// Optimize retry function with graceful error handling
+// Optimize retry function with minimal backoff for faster connections
 async function retry<T>(
   fn: () => Promise<T>,
-  retries = 3, // Back to 3 retries for reliability
-  initialDelay = 500, // Back to 500ms initial delay
+  retries = 2, // Reduced from 3 to 2 retries for faster resolution
+  initialDelay = 300, // Reduced from 500 to 300ms initial delay
   context = ""
 ): Promise<T> {
   let lastError;
@@ -36,21 +36,10 @@ async function retry<T>(
       console.log(`${context} - Attempt ${i + 1}/${retries}`);
       return await fn();
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error(`${context} - Attempt ${i + 1} failed:`, errorMessage);
-      
-      // Check if this is a 403 or rate limit error
-      const is403Error = errorMessage.includes('403') || 
-                         errorMessage.includes('forbidden') || 
-                         errorMessage.includes('Access forbidden');
-      
+      console.error(`${context} - Attempt ${i + 1} failed:`, error);
       lastError = error;
       if (i < retries - 1) {
-        // Use increasing delays for rate limit errors
-        const delayTime = is403Error ? 
-          initialDelay * Math.pow(2, i) : // Exponential backoff for rate limits
-          initialDelay * (i + 1);          // Linear backoff for other errors
-          
+        const delayTime = initialDelay * (i + 1); // Linear backoff instead of exponential
         console.log(`${context} - Retrying in ${delayTime}ms...`);
         await delay(delayTime);
       }
@@ -59,46 +48,44 @@ async function retry<T>(
   throw lastError;
 }
 
-// Test connection with better error handling
+// Super quick connection test that just checks for slot
 const testConnection = async (connection: Connection): Promise<boolean> => {
   try {
-    const slot = await connection.getSlot('finalized');
-    return slot > 0;
+    const slot = await connection.getSlot('processed');
+    return true;
   } catch (error) {
-    console.warn(`Connection test failed: ${error instanceof Error ? error.message : String(error)}`);
     return false;
   }
 };
 
-// Create a more reliable connection
+// Create a faster connection with minimal timeout
 const createConnection = async (): Promise<Connection> => {
-  // Try each endpoint sequentially rather than in parallel
-  // This is more reliable than racing, which can lead to rate limits
-  for (const endpoint of FAST_RPC_ENDPOINTS) {
-    try {
-      console.log(`Attempting to connect to ${endpoint}`);
-      const connection = new Connection(endpoint, {
-        commitment: 'confirmed',
-        confirmTransactionInitialTimeout: 60000, // 60s timeout
-        disableRetryOnRateLimit: false,
-      });
-      
-      // Test the connection
-      const isValid = await testConnection(connection);
-      if (isValid) {
-        console.log(`Successfully connected to ${endpoint}`);
-        return connection;
-      }
-    } catch (error) {
-      console.warn(`Failed to connect to ${endpoint}: ${error instanceof Error ? error.message : String(error)}`);
-    }
+  // Try endpoints in parallel instead of sequentially
+  const connectionPromises = FAST_RPC_ENDPOINTS.map(endpoint => {
+    const connection = new Connection(endpoint, {
+      commitment: 'processed' as const, // 'processed' is faster than 'confirmed'
+      confirmTransactionInitialTimeout: 30000, // 30s timeout
+      disableRetryOnRateLimit: false,
+    });
+    
+    return Promise.race([
+      testConnection(connection).then(isValid => isValid ? connection : Promise.reject()),
+      delay(2000).then(() => Promise.reject()) // 2s max wait time per endpoint test
+    ]).catch(() => null);
+  });
+  
+  // Use the first connection that responds
+  const connections = await Promise.all(connectionPromises);
+  const validConnection = connections.find(conn => conn !== null);
+  
+  if (validConnection) {
+    return validConnection;
   }
   
-  // Fallback to simple connection with first endpoint
-  console.log(`Using fallback connection to ${FAST_RPC_ENDPOINTS[0]}`);
+  // Fallback to simple connection with fastest endpoint
   return new Connection(FAST_RPC_ENDPOINTS[0], {
-    commitment: 'confirmed',
-    confirmTransactionInitialTimeout: 60000,
+    commitment: 'processed', // 'processed' is faster than 'confirmed'
+    confirmTransactionInitialTimeout: 10000, // 10s timeout
   });
 };
 
