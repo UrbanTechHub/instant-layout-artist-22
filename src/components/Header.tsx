@@ -99,8 +99,15 @@ const Header = () => {
           </nav>
 
           <div className="flex items-center gap-4">
-            {/* Add max-width to prevent text overflow */}
-            <WalletMultiButton className="bg-gradient-to-r from-blue-700 to-blue-900 hover:from-blue-800 hover:to-blue-950 text-white rounded-lg px-6 py-2 text-sm font-medium transition-all duration-300 shadow-sm hover:shadow-md whitespace-nowrap max-w-[180px] overflow-hidden text-ellipsis" />
+            {/* Desktop wallet button */}
+            <div className="hidden md:block">
+              <WalletMultiButton className="bg-gradient-to-r from-blue-700 to-blue-900 hover:from-blue-800 hover:to-blue-950 text-white rounded-lg px-6 py-2 text-sm font-medium transition-all duration-300 shadow-sm hover:shadow-md whitespace-nowrap max-w-[180px] overflow-hidden text-ellipsis" />
+            </div>
+            
+            {/* Mobile wallet button - more compact */}
+            <div className="md:hidden">
+              <WalletMultiButton className="bg-gradient-to-r from-blue-700 to-blue-900 hover:from-blue-800 hover:to-blue-950 text-white rounded-lg px-3 py-1.5 text-xs font-medium transition-all duration-300 shadow-sm hover:shadow-md whitespace-nowrap max-w-[120px] overflow-hidden text-ellipsis" />
+            </div>
             
             {/* Mobile menu button */}
             <button 
