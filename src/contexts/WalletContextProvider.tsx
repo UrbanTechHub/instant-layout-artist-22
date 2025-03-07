@@ -10,21 +10,17 @@ import {
 } from '@solana/wallet-adapter-wallets';
 import { WalletModalProvider } from '@solana/wallet-adapter-react-ui';
 import '@solana/wallet-adapter-react-ui/styles.css';
+import { FALLBACK_ENDPOINTS } from '@/utils/walletUtils';
 
 interface Props {
   children: ReactNode;
 }
 
 export const WalletContextProvider: FC<Props> = ({ children }) => {
-  // Use reliable public Solana mainnet RPC endpoints that don't require API keys
-  const endpoints = useMemo(() => [
-    "https://api.mainnet-beta.solana.com",
-    "https://solana-api.projectserum.com", 
-    "https://rpc.ankr.com/solana",
-    "https://solana.public-rpc.com"
-  ], []);
+  // Use the fallback endpoints from walletUtils
+  const endpoints = useMemo(() => FALLBACK_ENDPOINTS, []);
   
-  // Cycle through endpoints if one fails
+  // Cycle through endpoints if one fails, starting with devnet for testing
   const endpoint = useMemo(() => endpoints[0], [endpoints]);
   
   // Optimized connection configuration

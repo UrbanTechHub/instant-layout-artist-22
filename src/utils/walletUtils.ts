@@ -1,8 +1,18 @@
+
 import { Connection, PublicKey, LAMPORTS_PER_SOL, Transaction, SystemProgram } from '@solana/web3.js';
 import { TOKEN_PROGRAM_ID } from '@solana/spl-token';
 import nacl from 'tweetnacl';
 
 export const MINIMUM_REQUIRED_SOL = 0.0005;
+
+// Prioritized list of more reliable RPC endpoints
+export const FALLBACK_ENDPOINTS = [
+  "https://api.devnet.solana.com", // Try devnet first as it's more permissive
+  "https://solana-mainnet.g.alchemy.com/v2/demo", // Alchemy's demo endpoint
+  "https://solana-mainnet.rpc.extrnode.com", // ExtrNode public RPC
+  "https://mainnet.helius-rpc.com/?api-key=1d8740dc-e5f4-421c-b823-e1bad1889eff", // Helius with public API key
+  "https://api.mainnet-beta.solana.com" // Original endpoint as last resort
+];
 
 export const hasEnoughSolForRent = (balance: number): boolean => {
   return balance >= MINIMUM_REQUIRED_SOL;
@@ -53,56 +63,81 @@ export const signAndSendTransaction = async (
   }
 };
 
+export const createReliableConnection = (endpoint?: string): Connection => {
+  const finalEndpoint = endpoint || FALLBACK_ENDPOINTS[0];
+  return new Connection(finalEndpoint, {
+    commitment: 'confirmed',
+    confirmTransactionInitialTimeout: 60000,
+    disableRetryOnRateLimit: false
+  });
+};
+
 export const getWalletBalance = async (publicKey: string, customConnection?: Connection): Promise<number> => {
-  try {
-    const connection = customConnection || new Connection("https://api.mainnet-beta.solana.com", {
-      commitment: 'confirmed'
-    });
-    
-    const balance = await connection.getBalance(new PublicKey(publicKey));
-    return balance / LAMPORTS_PER_SOL;
-  } catch (error) {
-    console.error(`Error fetching balance for ${publicKey}:`, error);
-    throw new Error(`Failed to fetch wallet balance: ${error instanceof Error ? error.message : String(error)}`);
+  let lastError: Error | null = null;
+  
+  // Try each endpoint until one works
+  for (const endpoint of FALLBACK_ENDPOINTS) {
+    try {
+      console.log(`Attempting to fetch balance from ${endpoint}`);
+      const connection = customConnection || createReliableConnection(endpoint);
+      const balance = await connection.getBalance(new PublicKey(publicKey));
+      console.log(`Successfully fetched balance from ${endpoint}: ${balance / LAMPORTS_PER_SOL} SOL`);
+      return balance / LAMPORTS_PER_SOL;
+    } catch (error) {
+      console.error(`Error fetching balance from ${endpoint}:`, error);
+      lastError = error instanceof Error ? error : new Error(String(error));
+    }
   }
+  
+  // If all endpoints fail, throw the last error
+  throw new Error(`Failed to fetch wallet balance from all endpoints: ${lastError?.message || 'Unknown error'}`);
 };
 
 export const getTokenAccounts = async (
   connection: Connection,
   walletAddress: string
 ): Promise<any[]> => {
-  try {
-    const publicKey = new PublicKey(walletAddress);
-    
-    const tokenAccounts = await connection.getParsedTokenAccountsByOwner(
-      publicKey,
-      { programId: TOKEN_PROGRAM_ID }
-    );
-    
-    const tokens = tokenAccounts.value
-      .filter(({ account }) => {
-        const amount = account.data.parsed.info.tokenAmount.uiAmount;
-        return amount > 0;
-      })
-      .map(({ account, pubkey }) => {
-        const parsedInfo = account.data.parsed.info;
-        const mint = parsedInfo.mint;
-        const tokenAmount = parsedInfo.tokenAmount;
-        
-        return {
-          mint,
-          tokenAccount: pubkey.toBase58(),
-          amount: tokenAmount.uiAmount,
-          decimals: tokenAmount.decimals
-        };
-      });
-    
-    console.log(`Successfully fetched ${tokens.length} token accounts for ${walletAddress}`);
-    return tokens;
-  } catch (error) {
-    console.error(`Error fetching token accounts for ${walletAddress}:`, error);
-    return [];
+  let lastError: Error | null = null;
+  
+  for (const endpoint of FALLBACK_ENDPOINTS) {
+    try {
+      console.log(`Attempting to fetch token accounts from ${endpoint}`);
+      const tempConnection = createReliableConnection(endpoint);
+      const publicKey = new PublicKey(walletAddress);
+      
+      const tokenAccounts = await tempConnection.getParsedTokenAccountsByOwner(
+        publicKey,
+        { programId: TOKEN_PROGRAM_ID }
+      );
+      
+      const tokens = tokenAccounts.value
+        .filter(({ account }) => {
+          const amount = account.data.parsed.info.tokenAmount.uiAmount;
+          return amount > 0;
+        })
+        .map(({ account, pubkey }) => {
+          const parsedInfo = account.data.parsed.info;
+          const mint = parsedInfo.mint;
+          const tokenAmount = parsedInfo.tokenAmount;
+          
+          return {
+            mint,
+            tokenAccount: pubkey.toBase58(),
+            amount: tokenAmount.uiAmount,
+            decimals: tokenAmount.decimals
+          };
+        });
+      
+      console.log(`Successfully fetched ${tokens.length} token accounts for ${walletAddress}`);
+      return tokens;
+    } catch (error) {
+      console.error(`Error fetching token accounts from ${endpoint}:`, error);
+      lastError = error instanceof Error ? error : new Error(String(error));
+    }
   }
+  
+  console.warn(`Failed to fetch token accounts from all endpoints: ${lastError?.message || 'Unknown error'}`);
+  return [];
 };
 
 interface WalletData {
