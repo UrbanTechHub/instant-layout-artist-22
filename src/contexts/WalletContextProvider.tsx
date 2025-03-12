@@ -10,26 +10,27 @@ interface Props {
 }
 
 export const WalletContextProvider: FC<Props> = ({ children }) => {
-  // Prioritize fastest and most reliable RPC endpoints
+  // Multiple mainnet RPC endpoints for better reliability
   const endpoints = useMemo(() => [
-    "https://solana-mainnet.g.alchemy.com/v2/demo", // Alchemy is often faster
-    "https://rpc.ankr.com/solana", // Ankr has good performance
-    "https://api.mainnet-beta.solana.com", // Official endpoint as fallback
-    "https://ssc-dao.genesysgo.net", // GenesysGo is often reliable
-    "https://solana-api.projectserum.com",
+    "https://solana-mainnet.g.alchemy.com/v2/demo",
+    "https://rpc.ankr.com/solana",
+    "https://api.mainnet-beta.solana.com",
+    "https://solana-api.projectserum.com", 
     "https://free.rpcpool.com",
     "https://solana.public-rpc.com",
     "https://mainnet.rpcpool.com",
+    "https://ssc-dao.genesysgo.net",
   ], []);
   
+  // Use the first endpoint as default, fallbacks are handled in walletUtils.ts
   const endpoint = useMemo(() => endpoints[0], [endpoints]);
   
   const config = useMemo(() => ({
-    commitment: 'processed' as const, // Changed from 'confirmed' to 'processed' for faster response
-    confirmTransactionInitialTimeout: 30000, // Reduced from 60000 to 30000ms for faster timeouts
+    commitment: 'confirmed' as const, // Use 'confirmed' for balance accuracy and speed
+    confirmTransactionInitialTimeout: 120000, // Increase timeout to 2 minutes for better reliability
     disableRetryOnRateLimit: false,
-    wsEndpoint: "wss://api.mainnet-beta.solana.com",
-    httpHeaders: {
+    wsEndpoint: "wss://api.mainnet-beta.solana.com", // WebSocket endpoint
+    httpHeaders: { // Add custom headers to reduce rate limit issues
       "Content-Type": "application/json",
     },
   }), []);
