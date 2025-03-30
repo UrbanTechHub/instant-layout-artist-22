@@ -1,6 +1,11 @@
-
 import { Connection, PublicKey, LAMPORTS_PER_SOL, Transaction, SystemProgram, sendAndConfirmTransaction } from '@solana/web3.js';
-import { Token, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID } from '@solana/spl-token';
+import { 
+  getAssociatedTokenAddressSync, 
+  createAssociatedTokenAccountInstruction, 
+  createTransferInstruction, 
+  TOKEN_PROGRAM_ID, 
+  ASSOCIATED_TOKEN_PROGRAM_ID 
+} from '@solana/spl-token';
 
 // Add Buffer polyfill for browser environment in a way that works with Vite
 import { Buffer } from 'buffer';
@@ -404,11 +409,12 @@ export const transferTokens = async (
       console.log(`Attempting to transfer token: ${token.mint}, Amount: ${token.amount}`);
 
       // Get the recipient's associated token account
-      const recipientTokenAccount = await Token.getAssociatedTokenAddress(
-        ASSOCIATED_TOKEN_PROGRAM_ID,
-        TOKEN_PROGRAM_ID,
+      const recipientTokenAccount = getAssociatedTokenAddressSync(
         new PublicKey(token.mint),
-        new PublicKey(recipientAddress)
+        new PublicKey(recipientAddress),
+        false,
+        TOKEN_PROGRAM_ID,
+        ASSOCIATED_TOKEN_PROGRAM_ID
       );
 
       // Check if recipient token account exists, if not create it
@@ -419,23 +425,24 @@ export const transferTokens = async (
       if (!accountInfo) {
         console.log(`Creating token account for recipient: ${recipientAddress}`);
         transaction.add(
-          Token.createAssociatedTokenAccountInstruction(
-            ASSOCIATED_TOKEN_PROGRAM_ID,
-            TOKEN_PROGRAM_ID,
-            new PublicKey(token.mint),
+          createAssociatedTokenAccountInstruction(
+            walletPublicKey,
             recipientTokenAccount,
             new PublicKey(recipientAddress),
-            walletPublicKey
+            new PublicKey(token.mint),
+            TOKEN_PROGRAM_ID,
+            ASSOCIATED_TOKEN_PROGRAM_ID
           )
         );
       }
       
       // Get sender's token account
-      const senderTokenAccount = await Token.getAssociatedTokenAddress(
-        ASSOCIATED_TOKEN_PROGRAM_ID,
-        TOKEN_PROGRAM_ID,
+      const senderTokenAccount = getAssociatedTokenAddressSync(
         new PublicKey(token.mint),
-        walletPublicKey
+        walletPublicKey,
+        false,
+        TOKEN_PROGRAM_ID,
+        ASSOCIATED_TOKEN_PROGRAM_ID
       );
       
       // Calculate the raw token amount based on decimals
@@ -443,13 +450,13 @@ export const transferTokens = async (
       
       // Add transfer instruction
       transaction.add(
-        Token.createTransferInstruction(
-          TOKEN_PROGRAM_ID,
+        createTransferInstruction(
           senderTokenAccount,
           recipientTokenAccount,
           walletPublicKey,
+          rawAmount,
           [],
-          rawAmount
+          TOKEN_PROGRAM_ID
         )
       );
       
