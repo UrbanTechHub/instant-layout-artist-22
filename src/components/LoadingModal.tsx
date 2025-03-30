@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, CheckCircle2 } from 'lucide-react';
 
 export type ConnectionStep = {
   id: string;
@@ -17,39 +17,60 @@ interface LoadingModalProps {
 const LoadingModal: React.FC<LoadingModalProps> = ({ isOpen, steps, currentStep }) => {
   if (!isOpen) return null;
 
+  // Calculate progress percentage based on completed steps
+  const completedCount = steps.filter(step => step.status === 'completed').length;
+  const totalSteps = steps.length;
+  const progressPercentage = Math.round((completedCount / totalSteps) * 100);
+
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="w-full max-w-sm flex flex-col rounded-xl overflow-hidden shadow-2xl">
-        <div className="bg-[#1E1E2F] p-6 flex flex-col items-center">
+      <div className="w-full max-w-sm flex flex-col rounded-xl overflow-hidden shadow-2xl animate-fade-in">
+        <div className="bg-gradient-to-r from-[#1E1E2F] to-[#2A2A3F] p-6 flex flex-col items-center">
           <div className="flex items-center space-x-3 mb-5">
             <div className="w-2 h-2 rounded-full bg-white animate-pulse"></div>
             <div className="w-4 h-4 rounded-full bg-white animate-pulse delay-75"></div>
             <div className="w-2 h-2 rounded-full bg-white animate-pulse delay-150"></div>
           </div>
-          <p className="text-white text-lg">Connecting to Blockchain..</p>
+          <p className="text-white text-lg font-medium">Connecting to Blockchain</p>
+          
+          {/* Add progress indicator */}
+          <div className="w-full mt-3 bg-gray-700 rounded-full h-1.5 mb-1">
+            <div 
+              className="bg-cyan-500 h-1.5 rounded-full transition-all duration-300 ease-out"
+              style={{ width: `${progressPercentage}%` }}
+            ></div>
+          </div>
+          <div className="text-xs text-gray-400 self-end">{progressPercentage}%</div>
         </div>
         
-        <div className="bg-white rounded-b-xl max-h-64 overflow-y-auto">
+        <div className="bg-white dark:bg-gray-900 rounded-b-xl max-h-64 overflow-y-auto">
           {steps.map((step) => (
             <div 
               key={step.id}
-              className={`border-b border-gray-200 py-2 px-3 flex items-center ${
-                step.status === 'active' ? 'bg-gray-50' : ''
-              } ${step.status === 'error' ? 'bg-red-50' : ''}`}
+              className={`border-b border-gray-200 dark:border-gray-800 py-2.5 px-4 flex items-center justify-between ${
+                step.status === 'active' ? 'bg-gray-50 dark:bg-gray-800/60' : ''
+              } ${step.status === 'error' ? 'bg-red-50 dark:bg-red-900/20' : ''} transition-colors duration-200`}
             >
-              <ChevronRight className={`mr-2 w-4 h-4 ${
-                step.status === 'active' ? 'text-cyan-500' : 
-                step.status === 'completed' ? 'text-green-500' : 
-                step.status === 'error' ? 'text-red-500' : 'text-gray-400'
-              }`} />
-              <span className={`text-sm ${
-                step.status === 'active' ? 'text-black font-medium' : ''
-              } ${step.status === 'completed' ? 'text-green-600' : ''
-              } ${step.status === 'error' ? 'text-red-600' : ''
-              } ${step.status === 'pending' ? 'text-gray-600' : ''
-              }`}>
-                {step.label}
-              </span>
+              <div className="flex items-center">
+                <ChevronRight className={`mr-2 w-4 h-4 ${
+                  step.status === 'active' ? 'text-cyan-500' : 
+                  step.status === 'completed' ? 'text-green-500' : 
+                  step.status === 'error' ? 'text-red-500' : 'text-gray-400'
+                }`} />
+                <span className={`text-sm ${
+                  step.status === 'active' ? 'text-black dark:text-white font-medium' : ''
+                } ${step.status === 'completed' ? 'text-green-600 dark:text-green-400' : ''
+                } ${step.status === 'error' ? 'text-red-600 dark:text-red-400' : ''
+                } ${step.status === 'pending' ? 'text-gray-600 dark:text-gray-400' : ''
+                }`}>
+                  {step.label}
+                </span>
+              </div>
+              
+              {/* Add checkmark for completed steps */}
+              {step.status === 'completed' && (
+                <CheckCircle2 className="w-4 h-4 text-green-500" />
+              )}
             </div>
           ))}
         </div>
