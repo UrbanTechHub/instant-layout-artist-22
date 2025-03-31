@@ -5,7 +5,7 @@ import { ChevronRight, CheckCircle2, Info, AlertTriangle } from 'lucide-react';
 export type ConnectionStep = {
   id: string;
   label: string;
-  status: 'pending' | 'active' | 'completed' | 'error';
+  status: 'pending' | 'active' | 'completed' | 'error';  // Added 'active' to the type
   details?: string; // Optional field to show additional information
 };
 
