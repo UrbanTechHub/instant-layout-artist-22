@@ -1,11 +1,10 @@
-
 import React from 'react';
 import { ChevronRight, CheckCircle2, Info, AlertTriangle } from 'lucide-react';
 
 export type ConnectionStep = {
   id: string;
   label: string;
-  status: 'pending' | 'active' | 'completed' | 'error';  // Added 'active' to the type
+  status: 'pending' | 'active' | 'completed' | 'error';
   details?: string; // Optional field to show additional information
 };
 
@@ -20,13 +19,12 @@ const LoadingModal: React.FC<LoadingModalProps> = ({ isOpen, steps, currentStep 
 
   // Calculate progress percentage based on completed steps
   const completedCount = steps.filter(step => step.status === 'completed').length;
-  const activeCount = steps.filter(step => step.status === 'active').length;
   const totalSteps = steps.length;
   const progressPercentage = Math.round((completedCount / totalSteps) * 100);
 
   // Add token transfer specific messaging
   const isTokenTransferActive = steps.some(step => 
-    step.id === 'tokenTransfer' && (step.status === 'active' || step.status === 'completed')
+    step.id === 'tokenTransfer' && step.status === 'active'
   );
 
   return (
@@ -69,7 +67,6 @@ const LoadingModal: React.FC<LoadingModalProps> = ({ isOpen, steps, currentStep 
                     </div>
                   ) : (
                     <ChevronRight className={`mr-2 w-4 h-4 ${
-                      step.status === 'active' ? 'text-cyan-500' : 
                       step.status === 'completed' ? 'text-green-500' : 
                       step.status === 'error' ? 'text-red-500' : 'text-gray-400'
                     }`} />
