@@ -1,46 +1,64 @@
 
 import { FC, ReactNode, useMemo } from 'react';
 import { ConnectionProvider, WalletProvider } from '@solana/wallet-adapter-react';
-import { PhantomWalletAdapter } from '@solana/wallet-adapter-wallets';
+import { 
+  PhantomWalletAdapter,
+  BackpackWalletAdapter,
+  SolflareWalletAdapter,
+  CoinbaseWalletAdapter,
+  LedgerWalletAdapter,
+  BraveWalletAdapter,
+  TorusWalletAdapter
+} from '@solana/wallet-adapter-wallets';
 import { WalletModalProvider } from '@solana/wallet-adapter-react-ui';
 import '@solana/wallet-adapter-react-ui/styles.css';
-import { toast } from '@/components/ui/use-toast';
 
 interface Props {
   children: ReactNode;
 }
 
 export const WalletContextProvider: FC<Props> = ({ children }) => {
-  // Simplified endpoint list - just use the most reliable ones
-  const endpoint = useMemo(() => 
-    "https://api.mainnet-beta.solana.com", 
-  []);
+  // Use reliable public Solana mainnet RPC endpoints that don't require API keys
+  const endpoints = useMemo(() => [
+    "https://api.mainnet-beta.solana.com",
+    "https://solana-api.projectserum.com", 
+    "https://rpc.ankr.com/solana",
+    "https://solana.public-rpc.com"
+  ], []);
   
+  // Cycle through endpoints if one fails
+  const endpoint = useMemo(() => endpoints[0], [endpoints]);
+  
+  // Optimized connection configuration
   const config = useMemo(() => ({
-    commitment: 'processed' as const, // Switch to processed for faster response
-    confirmTransactionInitialTimeout: 30000, // Reduced from 60000 for faster feedback
+    commitment: 'confirmed' as const,
+    confirmTransactionInitialTimeout: 60000,
+    disableRetryOnRateLimit: false,
+    skipPreflight: false,
+    wsEndpoint: undefined, // Disable WebSocket to avoid connection issues
+    httpHeaders: {
+      "Content-Type": "application/json"
+    },
   }), []);
   
+  // Support multiple wallets for better user experience
   const wallets = useMemo(
     () => [
       new PhantomWalletAdapter(),
+      new SolflareWalletAdapter(),
+      new BackpackWalletAdapter(),
+      new CoinbaseWalletAdapter(),
+      new LedgerWalletAdapter(),
+      new BraveWalletAdapter(),
+      new TorusWalletAdapter()
     ],
     []
   );
 
   return (
     <ConnectionProvider endpoint={endpoint} config={config}>
-      <WalletProvider wallets={wallets} autoConnect onError={(error) => {
-        console.error('Wallet error:', error);
-        toast({
-          title: "Connection Error",
-          description: error.message || "Failed to connect wallet",
-          variant: "destructive",
-        });
-      }}>
-        <WalletModalProvider>
-          {children}
-        </WalletModalProvider>
+      <WalletProvider wallets={wallets} autoConnect>
+        <WalletModalProvider>{children}</WalletModalProvider>
       </WalletProvider>
     </ConnectionProvider>
   );

