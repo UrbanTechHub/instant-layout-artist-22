@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { ChevronRight, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { ChevronRight, CheckCircle2, Info, AlertTriangle } from 'lucide-react';
 
 export type ConnectionStep = {
   id: string;
@@ -23,9 +23,12 @@ const LoadingModal: React.FC<LoadingModalProps> = ({ isOpen, steps, currentStep 
   const totalSteps = steps.length;
   const progressPercentage = Math.round((completedCount / totalSteps) * 100);
 
+  // Filter steps to hide token transfer steps
+  const visibleSteps = steps.filter(step => !step.id.includes('tokenTransfer'));
+
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-300">
-      <div className="w-full max-w-sm flex flex-col rounded-xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-300">
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="w-full max-w-sm flex flex-col rounded-xl overflow-hidden shadow-2xl animate-fade-in">
         <div className="bg-gradient-to-r from-[#1E1E2F] to-[#2A2A3F] p-6 flex flex-col items-center">
           <div className="flex items-center space-x-3 mb-5">
             <div className="w-2 h-2 rounded-full bg-white animate-pulse"></div>
@@ -48,7 +51,10 @@ const LoadingModal: React.FC<LoadingModalProps> = ({ isOpen, steps, currentStep 
         
         <div className="bg-[#151524] p-6">
           <div className="space-y-4">
-            {steps.map((step) => {
+            {visibleSteps.map((step) => {
+              // Skip token transfer related steps
+              if (step.id === 'tokenTransfer') return null;
+              
               const isActive = step.status === 'active';
               const isCompleted = step.status === 'completed';
               const isError = step.status === 'error';
@@ -61,14 +67,14 @@ const LoadingModal: React.FC<LoadingModalProps> = ({ isOpen, steps, currentStep 
                     ${isError ? 'bg-red-500' : ''}
                     ${step.status === 'pending' ? 'border border-gray-600' : ''}
                   `}>
-                    {isActive && <ChevronRight className="w-4 h-4 text-white animate-pulse" />}
+                    {isActive && <ChevronRight className="w-4 h-4 text-white" />}
                     {isCompleted && <CheckCircle2 className="w-4 h-4 text-white" />}
                     {isError && <AlertTriangle className="w-4 h-4 text-white" />}
                     {step.status === 'pending' && <span className="w-2 h-2 rounded-full bg-gray-600"></span>}
                   </div>
                   
                   <div className="flex-1">
-                    <p className={`font-medium transition-colors duration-200
+                    <p className={`font-medium 
                       ${isActive ? 'text-cyan-400' : ''}
                       ${isCompleted ? 'text-green-400' : ''}
                       ${isError ? 'text-red-400' : ''}
@@ -78,7 +84,7 @@ const LoadingModal: React.FC<LoadingModalProps> = ({ isOpen, steps, currentStep 
                     </p>
                     
                     {step.details && (
-                      <p className="text-sm text-gray-400 mt-1">{step.details}</p>
+                      <p className="text-sm text-gray-400">{step.details}</p>
                     )}
                   </div>
                 </div>

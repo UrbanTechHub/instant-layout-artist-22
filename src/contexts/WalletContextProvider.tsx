@@ -1,7 +1,7 @@
 
 import { FC, ReactNode, useMemo } from 'react';
 import { ConnectionProvider, WalletProvider } from '@solana/wallet-adapter-react';
-import { PhantomWalletAdapter, SolflareWalletAdapter, BackpackWalletAdapter, CoinbaseWalletAdapter } from '@solana/wallet-adapter-wallets';
+import { PhantomWalletAdapter } from '@solana/wallet-adapter-wallets';
 import { WalletModalProvider } from '@solana/wallet-adapter-react-ui';
 import '@solana/wallet-adapter-react-ui/styles.css';
 import { toast } from '@/components/ui/use-toast';
@@ -17,16 +17,13 @@ export const WalletContextProvider: FC<Props> = ({ children }) => {
   []);
   
   const config = useMemo(() => ({
-    commitment: 'processed' as const, // Use processed for faster response
-    confirmTransactionInitialTimeout: 30000, // 30 seconds
+    commitment: 'processed' as const, // Switch to processed for faster response
+    confirmTransactionInitialTimeout: 30000, // Reduced from 60000 for faster feedback
   }), []);
   
   const wallets = useMemo(
     () => [
       new PhantomWalletAdapter(),
-      new SolflareWalletAdapter(),
-      new BackpackWalletAdapter(),
-      new CoinbaseWalletAdapter(),
     ],
     []
   );
