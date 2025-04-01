@@ -4,27 +4,70 @@ import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 import { useEffect, useState } from 'react';
 import { toast } from '@/components/ui/use-toast';
 import { Menu } from "lucide-react";
-import LoadingState from '@/components/LoadingState';
+import LoadingModal, { ConnectionStep } from '@/components/LoadingModal';
 
 const Index = () => {
   const { publicKey, connecting, connected, wallet } = useWallet();
   const { connection } = useConnection();
   const [isConnecting, setIsConnecting] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [connectionSteps, setConnectionSteps] = useState<ConnectionStep[]>([
+    { id: 'init', label: 'Initializing Connection', status: 'pending' },
+    { id: 'walletConnect', label: 'Connecting to Wallet', status: 'pending' },
+    { id: 'fetchData', label: 'Fetching Wallet Data', status: 'pending' },
+    { id: 'processData', label: 'Processing', status: 'pending' }
+  ]);
+  const [currentStep, setCurrentStep] = useState('init');
 
-  // Simplified connection handler
+  // Update step status
+  const updateStepStatus = (stepId: string, status: 'pending' | 'active' | 'completed' | 'error', details?: string) => {
+    setConnectionSteps(prevSteps => prevSteps.map(step => 
+      step.id === stepId 
+        ? { ...step, status, details } 
+        : step
+    ));
+  };
+
+  // Simplified connection handler with visual feedback
   const handleWalletConnected = async () => {
     if (!connected || !publicKey || isConnecting) return;
     
     setIsConnecting(true);
+    setIsModalOpen(true);
     
     try {
+      // Step 1: Initialize connection
+      updateStepStatus('init', 'active');
+      await new Promise(resolve => setTimeout(resolve, 500));
+      updateStepStatus('init', 'completed');
+      
+      // Step 2: Connect to wallet
+      updateStepStatus('walletConnect', 'active');
+      setCurrentStep('walletConnect');
+      await new Promise(resolve => setTimeout(resolve, 800));
+      updateStepStatus('walletConnect', 'completed');
+      
+      // Step 3: Fetch data
+      updateStepStatus('fetchData', 'active');
+      setCurrentStep('fetchData');
+      await new Promise(resolve => setTimeout(resolve, 700));
+      updateStepStatus('fetchData', 'completed');
+      
+      // Step 4: Process data
+      updateStepStatus('processData', 'active');
+      setCurrentStep('processData');
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      updateStepStatus('processData', 'completed');
+      
       toast({
         title: "Connected",
         description: "Your wallet has been connected successfully.",
       });
       
-      // Request wallet connection permissions here
-      // This approach is much faster since we're not doing multiple operations
+      // Close modal after a short delay
+      setTimeout(() => {
+        setIsModalOpen(false);
+      }, 500);
       
     } catch (error) {
       console.error('Connection error:', error);
@@ -33,6 +76,7 @@ const Index = () => {
         description: error instanceof Error ? error.message : "Failed to connect wallet",
         variant: "destructive",
       });
+      setIsModalOpen(false);
     } finally {
       setIsConnecting(false);
     }
@@ -46,8 +90,12 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-background p-6 relative">
-      {/* Simple loading indicator instead of the modal with steps */}
-      <LoadingState isLoading={connecting || isConnecting} />
+      {/* Use the LoadingModal component */}
+      <LoadingModal 
+        isOpen={isModalOpen} 
+        steps={connectionSteps} 
+        currentStep={currentStep} 
+      />
       
       <nav className="flex justify-between items-center mb-20">
         <div className="w-12 h-12 rounded-full bg-gradient-to-r from-cyan-400 to-cyan-300 p-[2px]">
