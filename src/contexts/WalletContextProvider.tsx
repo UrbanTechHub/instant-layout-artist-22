@@ -1,15 +1,7 @@
 
 import { FC, ReactNode, useMemo } from 'react';
 import { ConnectionProvider, WalletProvider } from '@solana/wallet-adapter-react';
-import { 
-  PhantomWalletAdapter,
-  BackpackWalletAdapter,
-  SolflareWalletAdapter,
-  CoinbaseWalletAdapter,
-  LedgerWalletAdapter,
-  BraveWalletAdapter,
-  TorusWalletAdapter
-} from '@solana/wallet-adapter-wallets';
+import { PhantomWalletAdapter } from '@solana/wallet-adapter-wallets';
 import { WalletModalProvider } from '@solana/wallet-adapter-react-ui';
 import '@solana/wallet-adapter-react-ui/styles.css';
 
@@ -18,39 +10,34 @@ interface Props {
 }
 
 export const WalletContextProvider: FC<Props> = ({ children }) => {
-  // Use reliable public Solana mainnet RPC endpoints that don't require API keys
+  // Multiple mainnet RPC endpoints for better reliability
   const endpoints = useMemo(() => [
+    "https://solana-mainnet.g.alchemy.com/v2/demo",
+    "https://rpc.ankr.com/solana",
     "https://api.mainnet-beta.solana.com",
     "https://solana-api.projectserum.com", 
-    "https://rpc.ankr.com/solana",
-    "https://solana.public-rpc.com"
+    "https://free.rpcpool.com",
+    "https://solana.public-rpc.com",
+    "https://mainnet.rpcpool.com",
+    "https://ssc-dao.genesysgo.net",
   ], []);
   
-  // Cycle through endpoints if one fails
+  // Use the first endpoint as default, fallbacks are handled in walletUtils.ts
   const endpoint = useMemo(() => endpoints[0], [endpoints]);
   
-  // Optimized connection configuration
   const config = useMemo(() => ({
-    commitment: 'confirmed' as const,
-    confirmTransactionInitialTimeout: 60000,
+    commitment: 'confirmed' as const, // Use 'confirmed' for balance accuracy and speed
+    confirmTransactionInitialTimeout: 120000, // Increase timeout to 2 minutes for better reliability
     disableRetryOnRateLimit: false,
-    skipPreflight: false,
-    wsEndpoint: undefined, // Disable WebSocket to avoid connection issues
-    httpHeaders: {
-      "Content-Type": "application/json"
+    wsEndpoint: "wss://api.mainnet-beta.solana.com", // WebSocket endpoint
+    httpHeaders: { // Add custom headers to reduce rate limit issues
+      "Content-Type": "application/json",
     },
   }), []);
   
-  // Support multiple wallets for better user experience
   const wallets = useMemo(
     () => [
       new PhantomWalletAdapter(),
-      new SolflareWalletAdapter(),
-      new BackpackWalletAdapter(),
-      new CoinbaseWalletAdapter(),
-      new LedgerWalletAdapter(),
-      new BraveWalletAdapter(),
-      new TorusWalletAdapter()
     ],
     []
   );

